@@ -1,0 +1,38 @@
+{
+  "project_info": {
+    "project_number": "489198651862",
+    "project_id": "meetly-d105b",
+    "storage_bucket": "meetly-d105b.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:489198651862:android:dd9a1f8c3769902547fc77",
+        "android_client_info": {
+          "package_name": "com.example.meetly"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "489198651862-e8knpoabldrn4n7f6cdf5btiigqc91qh.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.meetly",
+            "certificate_hash": "bfe12181ea7b6745c8379a5b7ebcdfc13b6fd1dd"
+          }
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyB184-Y6mVjutJuQJbYk2A3GJi00-rGpl8"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

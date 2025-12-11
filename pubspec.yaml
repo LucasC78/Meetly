@@ -1,0 +1,50 @@
+name: Meetly
+description: A new Flutter project.
+
+publish_to: 'none'
+
+version: 1.0.0+1
+
+environment:
+  sdk: '>=2.19.6 <3.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  firebase_core: ^3.0.0
+  firebase_auth: ^5.5.1
+  cloud_firestore: ^5.0.0
+  firebase_storage: ^12.4.4
+  firebase_messaging: ^15.2.4
+  google_sign_in: ^6.3.0
+  image_picker: ^1.1.2
+  path: ^1.8.0
+  cloudinary_flutter: ^1.0.0
+  cloudinary_url_gen: ^1.0.0
+  http: ^1.4.0
+  file_picker: ^10.2.0
+  intl: ^0.18.1
+  cupertino_icons: ^1.0.2
+  lottie: ^2.7.0
+  flutter_local_notifications: ^19.4.2
+
+dev_dependencies:
+  flutter_launcher_icons: ^0.13.1
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true
+
+  assets:
+    - assets/images/default_image.jpg
+    - assets/icons/google-icon.png
+    - assets/animations/meetly_intro.json
+
+flutter_icons:
+  android: true
+  ios: true
+  image_path: "assets/icons/meetlylogo.png"
+  remove_alpha_ios: true
