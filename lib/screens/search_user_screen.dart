@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:Meetly/widgets/custom_bottom_nav_bar.dart';
+import 'package:Meetly/config/theme.dart'; // 👈 pour pinkGradient & couleurs thème
 
 class SearchUserScreen extends StatefulWidget {
   const SearchUserScreen({super.key});
@@ -40,6 +41,7 @@ class _SearchUserScreenState extends State<SearchUserScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+
     return Scaffold(
       backgroundColor: theme.scaffoldBackgroundColor,
       appBar: AppBar(
@@ -59,34 +61,43 @@ class _SearchUserScreenState extends State<SearchUserScreen> {
       ),
       body: Column(
         children: [
+          // 🔍 Champ de recherche
           Padding(
             padding: const EdgeInsets.all(12.0),
             child: Container(
               decoration: BoxDecoration(
-                border: Border.all(color: Colors.cyanAccent),
+                border: Border.all(color: theme.colorScheme.primary),
                 borderRadius: BorderRadius.circular(30),
               ),
               padding: const EdgeInsets.symmetric(horizontal: 16),
               child: TextField(
                 controller: _searchController,
                 onChanged: _search,
-                style: const TextStyle(color: Colors.white, fontSize: 18),
-                decoration: const InputDecoration(
+                style: TextStyle(
+                  color: theme.colorScheme.onBackground,
+                  fontSize: 18,
+                ),
+                decoration: InputDecoration(
                   border: InputBorder.none,
                   enabledBorder: InputBorder.none,
                   focusedBorder: InputBorder.none,
                   disabledBorder: InputBorder.none,
-                  filled:
-                      false, // <= assure que le champ n'est pas rempli (donc pas de fond)
-                  fillColor:
-                      Colors.transparent, // <= au cas où, on force aussi ici
+                  filled: false,
+                  fillColor: Colors.transparent,
                   hintText: 'Search...',
-                  hintStyle: TextStyle(color: Colors.cyanAccent),
-                  icon: Icon(Icons.search, color: Colors.cyanAccent),
+                  hintStyle: TextStyle(
+                    color: theme.colorScheme.primary.withOpacity(0.9),
+                  ),
+                  icon: Icon(
+                    Icons.search,
+                    color: theme.colorScheme.primary,
+                  ),
                 ),
               ),
             ),
           ),
+
+          // 🔎 Résultats
           Expanded(
             child: ListView.builder(
               itemCount: _results.length,
@@ -133,12 +144,10 @@ class _SearchUserScreenState extends State<SearchUserScreen> {
         ],
       ),
       bottomNavigationBar: CustomBottomNavBar(
-        // 👈 AJOUTÉ
-        selectedIndex: 3, // 👈 Onglet actuel (ex: messages)
+        selectedIndex: 1, // ✅ SEARCH = 1
         onItemTapped: (index) {
-          // 👇 Logique de navigation
           if (index == 0) Navigator.pushNamed(context, '/home');
-          if (index == 1) Navigator.pushNamed(context, '/search');
+          if (index == 1) return; // ✅ déjà sur search
           if (index == 2) Navigator.pushNamed(context, '/addpost');
           if (index == 3) Navigator.pushNamed(context, '/profile');
         },
@@ -154,29 +163,29 @@ class NeonAvatarStatic extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+
     return Container(
       width: 70,
       height: 70,
-      decoration: BoxDecoration(
+      decoration: const BoxDecoration(
         shape: BoxShape.circle,
-        gradient: LinearGradient(
-          colors: [theme.colorScheme.secondary, theme.primaryColor],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
+        gradient: pinkGradient, // 🔥 même dégradé que le reste de l’app
       ),
       padding: const EdgeInsets.all(3),
       child: CircleAvatar(
         backgroundColor: theme.scaffoldBackgroundColor,
         child: ClipOval(
-          child: profilePicture != null
+          child: profilePicture != null && profilePicture!.isNotEmpty
               ? Image.network(
                   profilePicture!,
                   fit: BoxFit.cover,
                   width: double.infinity,
                   height: double.infinity,
                 )
-              : Icon(Icons.person, color: theme.colorScheme.secondary),
+              : Icon(
+                  Icons.person,
+                  color: theme.colorScheme.secondary,
+                ),
         ),
       ),
     );

@@ -2,7 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:Meetly/widgets/burger_menu.dart';
-import 'package:Meetly/config/theme.dart';
+import 'package:Meetly/config/theme.dart'; // ton theme.dart
 import 'package:Meetly/widgets/custom_bottom_nav_bar.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -16,11 +16,14 @@ class _HomeScreenState extends State<HomeScreen> {
   String userEmail = 'Email non disponible';
   String userName = 'Nom de l\'utilisateur';
   String? userProfilePicture;
+
   final TextEditingController _searchController = TextEditingController();
+
   List<Map<String, dynamic>> _searchResults = [];
-  Map<String, TextEditingController> _commentControllers = {};
-  Set<String> _showCommentInputFor = {};
-  Map<String, int> _visibleCommentCounts = {};
+  final Map<String, TextEditingController> _commentControllers = {};
+  final Set<String> _showCommentInputFor = {};
+  final Map<String, int> _visibleCommentCounts = {};
+
   User? currentUser;
 
   @override
@@ -35,10 +38,12 @@ class _HomeScreenState extends State<HomeScreen> {
       setState(() {
         userEmail = currentUser!.email ?? 'Email non disponible';
       });
-      DocumentSnapshot userDoc = await FirebaseFirestore.instance
+
+      final userDoc = await FirebaseFirestore.instance
           .collection('users')
           .doc(currentUser!.uid)
           .get();
+
       if (userDoc.exists) {
         setState(() {
           userName = userDoc['pseudo'] ?? 'Nom inconnu';
@@ -53,23 +58,25 @@ class _HomeScreenState extends State<HomeScreen> {
       setState(() => _searchResults = []);
       return;
     }
-    QuerySnapshot snapshot = await FirebaseFirestore.instance
+
+    final snapshot = await FirebaseFirestore.instance
         .collection('users')
         .where('pseudo', isGreaterThanOrEqualTo: query)
         .where('pseudo', isLessThanOrEqualTo: '$query\uf8ff')
         .get();
+
     setState(() {
       _searchResults = snapshot.docs
-          .map(
-            (doc) => {
-              'id': doc.id,
-              'pseudo': doc['pseudo'],
-              'email': doc['email'],
-            },
-          )
+          .map((doc) => {
+                'id': doc.id,
+                'pseudo': doc['pseudo'],
+                'email': doc['email'],
+              })
           .toList();
     });
   }
+
+  // ------------------ COMMENTAIRES ------------------ //
 
   void _addComment(String postId, String content) async {
     final user = FirebaseAuth.instance.currentUser;
@@ -88,6 +95,8 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildCommentInput(String postId) {
+    final theme = Theme.of(context);
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: TextField(
@@ -106,16 +115,12 @@ class _HomeScreenState extends State<HomeScreen> {
               margin: const EdgeInsets.all(6),
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                gradient: const LinearGradient(
-                  colors: [Color(0xFFF72585), Color(0xFF7209B7)],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
+                gradient: pinkGradient, // 🔥 dégradé orange global
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.pinkAccent.withOpacity(0.4),
+                    color: theme.colorScheme.primary.withOpacity(0.4),
                     blurRadius: 8,
-                    offset: Offset(0, 3),
+                    offset: const Offset(0, 3),
                   ),
                 ],
               ),
@@ -128,7 +133,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildCommentList(String postId) {
-    int visibleCount = _visibleCommentCounts[postId] ?? 3;
+    final visibleCount = _visibleCommentCounts[postId] ?? 3;
 
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance
@@ -138,14 +143,15 @@ class _HomeScreenState extends State<HomeScreen> {
           .orderBy('timestamp', descending: true)
           .snapshots(),
       builder: (context, snapshot) {
-        if (!snapshot.hasData) return const SizedBox();
+        if (!snapshot.hasData) return const SizedBox.shrink();
+
         final comments = snapshot.data!.docs;
         final totalComments = comments.length;
-        final visibleComments = comments.take(visibleCount).toList();
+        final limitedComments = comments.take(visibleCount).toList();
 
         return Column(
           children: [
-            ...visibleComments.map((comment) {
+            ...limitedComments.map((comment) {
               final data = comment.data() as Map<String, dynamic>;
               final userId = data['userId'] ?? '';
               final content = data['content'] ?? '';
@@ -155,8 +161,10 @@ class _HomeScreenState extends State<HomeScreen> {
                     .collection('users')
                     .doc(userId)
                     .get(),
-                builder: (context, snapshot) {
-                  final name = snapshot.data?.get('pseudo') ?? 'Utilisateur';
+                builder: (context, userSnapshot) {
+                  final name =
+                      userSnapshot.data?.get('pseudo') ?? 'Utilisateur';
+
                   return Padding(
                     padding: const EdgeInsets.symmetric(
                       horizontal: 16,
@@ -187,10 +195,8 @@ class _HomeScreenState extends State<HomeScreen> {
               TextButton(
                 onPressed: () {
                   setState(() {
-                    _visibleCommentCounts[postId] = (visibleCount + 3).clamp(
-                      0,
-                      totalComments,
-                    );
+                    _visibleCommentCounts[postId] =
+                        (visibleCount + 3).clamp(0, totalComments);
                   });
                 },
                 child: Text(
@@ -203,17 +209,11 @@ class _HomeScreenState extends State<HomeScreen> {
               TextButton(
                 onPressed: () {
                   setState(() {
-                    _visibleCommentCounts[postId] = (visibleCount - 3).clamp(
-                      3,
-                      totalComments,
-                    );
+                    _visibleCommentCounts[postId] =
+                        (visibleCount - 3).clamp(3, totalComments);
                   });
                 },
-                child: Text(
-                  (visibleCount - 3 <= 0)
-                      ? 'Réduire les commentaires'
-                      : 'Réduire les commentaires',
-                ),
+                child: const Text('Réduire les commentaires'),
               ),
           ],
         );
@@ -221,9 +221,12 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  // ------------------ BUILD ------------------ //
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+
     return Scaffold(
       backgroundColor: theme.scaffoldBackgroundColor,
       drawer: BurgerMenu(
@@ -236,7 +239,7 @@ class _HomeScreenState extends State<HomeScreen> {
         elevation: 0,
         leading: Builder(
           builder: (context) => IconButton(
-            icon: const Icon(Icons.menu, color: Colors.pinkAccent),
+            icon: Icon(Icons.menu, color: theme.colorScheme.secondary),
             onPressed: () => Scaffold.of(context).openDrawer(),
           ),
         ),
@@ -246,23 +249,39 @@ class _HomeScreenState extends State<HomeScreen> {
           style: TextStyle(
             fontSize: 28,
             fontWeight: FontWeight.bold,
-            color: Colors.pinkAccent,
-            shadows: [Shadow(blurRadius: 12, color: Colors.pinkAccent)],
+            color: theme.colorScheme.secondary,
+            shadows: [
+              Shadow(
+                blurRadius: 12,
+                color: theme.colorScheme.secondary.withOpacity(0.8),
+              ),
+            ],
           ),
         ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.add, color: Colors.pinkAccent),
+            icon: Icon(Icons.add, color: theme.colorScheme.secondary),
             onPressed: () => Navigator.pushNamed(context, '/addpost'),
           ),
           IconButton(
-            icon: const Icon(Icons.message, color: Colors.pinkAccent),
+            icon: Icon(Icons.message, color: theme.colorScheme.secondary),
             onPressed: () => Navigator.pushNamed(context, '/conversations'),
           ),
         ],
       ),
       body: Column(
         children: [
+          // (optionnel) champ de recherche si tu veux l'afficher
+          // Padding(
+          //   padding: const EdgeInsets.all(16.0),
+          //   child: TextField(
+          //     controller: _searchController,
+          //     onChanged: _searchUsers,
+          //     decoration: const InputDecoration(
+          //       hintText: 'Rechercher un utilisateur...',
+          //     ),
+          //   ),
+          // ),
           if (_searchResults.isNotEmpty)
             Expanded(
               child: ListView.builder(
@@ -289,26 +308,31 @@ class _HomeScreenState extends State<HomeScreen> {
                   if (!snapshot.hasData) {
                     return const Center(child: CircularProgressIndicator());
                   }
+
+                  final posts = snapshot.data!.docs;
+
                   return ListView.builder(
-                    itemCount: snapshot.data!.docs.length,
+                    itemCount: posts.length,
                     itemBuilder: (context, index) {
-                      var post = snapshot.data!.docs[index];
+                      final post = posts[index];
                       final postId = post.id;
+
                       _commentControllers.putIfAbsent(
                         postId,
                         () => TextEditingController(),
                       );
                       _visibleCommentCounts.putIfAbsent(postId, () => 3);
-                      String content = post['content'] ?? '';
-                      String imageUrl = post['imageUrl'] ?? '';
-                      String userId = post['userId'] ?? '';
-                      List likes = post['likes'] ?? [];
-                      bool isLiked = likes.contains(
-                        FirebaseAuth.instance.currentUser?.uid,
-                      );
-                      final isInputVisible = _showCommentInputFor.contains(
-                        postId,
-                      );
+
+                      final content = post['content'] ?? '';
+                      final imageUrl = post['imageUrl'] ?? '';
+                      final userId = post['userId'] ?? '';
+                      final likes = List<String>.from(post['likes'] ?? []);
+                      final currentUid =
+                          FirebaseAuth.instance.currentUser?.uid ?? '';
+                      final isLiked = likes.contains(currentUid);
+                      final isInputVisible =
+                          _showCommentInputFor.contains(postId);
+
                       return FutureBuilder<DocumentSnapshot>(
                         future: FirebaseFirestore.instance
                             .collection('users')
@@ -317,13 +341,13 @@ class _HomeScreenState extends State<HomeScreen> {
                         builder: (context, userSnapshot) {
                           final pseudo =
                               userSnapshot.data?.get('pseudo') ?? 'Utilisateur';
-                          final profilePicture =
-                              userSnapshot.data?.data().toString().contains(
-                                            'profilepicture',
-                                          ) ==
+                          final profilePicture = userSnapshot.data != null &&
+                                  (userSnapshot.data!.data()
+                                              as Map<String, dynamic>?)
+                                          ?.containsKey('profilepicture') ==
                                       true
-                                  ? userSnapshot.data!['profilepicture']
-                                  : null;
+                              ? userSnapshot.data!['profilepicture']
+                              : null;
 
                           return PostCard(
                             userId: userId,
@@ -331,34 +355,34 @@ class _HomeScreenState extends State<HomeScreen> {
                             imageUrl: imageUrl,
                             content: content,
                             likeCount: likes.length,
-                            userProfilePicture: profilePicture, // ✅ ici !
+                            userProfilePicture: profilePicture,
                             isLiked: isLiked,
                             onLikePressed: () async {
                               final userUid =
                                   FirebaseAuth.instance.currentUser?.uid;
-                              if (userUid != null) {
-                                final postRef = FirebaseFirestore.instance
-                                    .collection('posts')
-                                    .doc(postId);
-                                await FirebaseFirestore.instance.runTransaction(
-                                  (transaction) async {
-                                    final freshSnap = await transaction.get(
-                                      postRef,
-                                    );
-                                    List<dynamic> updatedLikes = List.from(
-                                      freshSnap['likes'] ?? [],
-                                    );
-                                    if (updatedLikes.contains(userUid)) {
-                                      updatedLikes.remove(userUid);
-                                    } else {
-                                      updatedLikes.add(userUid);
-                                    }
-                                    transaction.update(postRef, {
-                                      'likes': updatedLikes,
-                                    });
-                                  },
-                                );
-                              }
+                              if (userUid == null) return;
+
+                              final postRef = FirebaseFirestore.instance
+                                  .collection('posts')
+                                  .doc(postId);
+
+                              await FirebaseFirestore.instance.runTransaction(
+                                (transaction) async {
+                                  final freshSnap =
+                                      await transaction.get(postRef);
+                                  final updatedLikes = List<String>.from(
+                                      freshSnap['likes'] ?? []);
+
+                                  if (updatedLikes.contains(userUid)) {
+                                    updatedLikes.remove(userUid);
+                                  } else {
+                                    updatedLikes.add(userUid);
+                                  }
+
+                                  transaction
+                                      .update(postRef, {'likes': updatedLikes});
+                                },
+                              );
                             },
                             onCommentIconPressed: () {
                               setState(() {
@@ -386,9 +410,9 @@ class _HomeScreenState extends State<HomeScreen> {
         ],
       ),
       bottomNavigationBar: CustomBottomNavBar(
-        selectedIndex: 3,
+        selectedIndex: 0, // ✅ HOME = 0
         onItemTapped: (index) {
-          if (index == 0) Navigator.pushNamed(context, '/home');
+          if (index == 0) return; // ✅ déjà sur home
           if (index == 1) Navigator.pushNamed(context, '/search');
           if (index == 2) Navigator.pushNamed(context, '/addpost');
           if (index == 3) Navigator.pushNamed(context, '/profile');
@@ -397,6 +421,8 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 }
+
+// ==================== POST CARD ==================== //
 
 class PostCard extends StatelessWidget {
   final String username;
@@ -408,8 +434,8 @@ class PostCard extends StatelessWidget {
   final VoidCallback onCommentIconPressed;
   final Widget? commentInput;
   final Widget? commentsList;
-  final String? userProfilePicture; // 👈 ajoute cette ligne
-  final String userId; // 👈 ajoute ça
+  final String? userProfilePicture;
+  final String userId;
 
   const PostCard({
     super.key,
@@ -420,8 +446,8 @@ class PostCard extends StatelessWidget {
     required this.isLiked,
     required this.onLikePressed,
     required this.onCommentIconPressed,
-    required this.userProfilePicture, // 👈 ajoute ça
-    required this.userId, // 👈 n'oublie pas
+    required this.userProfilePicture,
+    required this.userId,
     this.commentInput,
     this.commentsList,
   });
@@ -430,6 +456,7 @@ class PostCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
+
     return Container(
       margin: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
       decoration: BoxDecoration(
@@ -440,6 +467,7 @@ class PostCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // HEADER USER
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
             child: Row(
@@ -449,22 +477,18 @@ class PostCard extends StatelessWidget {
                   height: 40,
                   decoration: const BoxDecoration(
                     shape: BoxShape.circle,
-                    gradient: LinearGradient(
-                      colors: [Color(0xFFF72585), Color(0xFF7209B7)],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    ),
+                    gradient: pinkGradient, // dégradé orange
                   ),
                   padding: const EdgeInsets.all(2),
                   child: CircleAvatar(
-                    backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+                    backgroundColor: theme.scaffoldBackgroundColor,
                     backgroundImage: userProfilePicture != null &&
                             userProfilePicture!.isNotEmpty
                         ? NetworkImage(userProfilePicture!)
                         : null,
-                    child: userProfilePicture == null ||
-                            userProfilePicture!.isEmpty
-                        ? const Icon(Icons.person, color: Colors.pinkAccent)
+                    child: (userProfilePicture == null ||
+                            userProfilePicture!.isEmpty)
+                        ? Icon(Icons.person, color: theme.colorScheme.secondary)
                         : null,
                   ),
                 ),
@@ -474,7 +498,7 @@ class PostCard extends StatelessWidget {
                     Navigator.pushNamed(
                       context,
                       '/profiledetail',
-                      arguments: userId, // <- tu dois passer userId au PostCard
+                      arguments: userId,
                     );
                   },
                   child: Text(
@@ -488,12 +512,14 @@ class PostCard extends StatelessWidget {
               ],
             ),
           ),
+
+          // IMAGE
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16.0),
             child: ClipRRect(
               borderRadius: BorderRadius.circular(16),
               child: AspectRatio(
-                aspectRatio: 4 / 3, // ou 3/2 selon ton besoin
+                aspectRatio: 4 / 3,
                 child: Image.network(
                   imageUrl,
                   width: double.infinity,
@@ -506,6 +532,8 @@ class PostCard extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 12),
+
+          // TEXTE + ACTIONS
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: Column(
@@ -534,12 +562,15 @@ class PostCard extends StatelessWidget {
                       icon: Icon(
                         isLiked ? Icons.favorite : Icons.favorite_border,
                         color: isLiked
-                            ? Colors.pinkAccent
+                            ? theme.colorScheme.secondary
                             : theme.textTheme.bodyMedium?.color,
                       ),
                       onPressed: onLikePressed,
                     ),
-                    Text('$likeCount likes', style: theme.textTheme.bodyMedium),
+                    Text(
+                      '$likeCount likes',
+                      style: theme.textTheme.bodyMedium,
+                    ),
                     const Spacer(),
                     IconButton(
                       icon: Icon(
@@ -559,6 +590,7 @@ class PostCard extends StatelessWidget {
               ],
             ),
           ),
+
           if (commentsList != null) commentsList!,
           if (commentInput != null) commentInput!,
           const SizedBox(height: 16),

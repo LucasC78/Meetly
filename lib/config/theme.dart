@@ -1,32 +1,45 @@
 import 'package:flutter/material.dart';
 
+// Dégradé principal (garde le nom si tu l'utilises déjà)
 const LinearGradient pinkGradient = LinearGradient(
   colors: [
-    Color(0xFFFF00FF),
-    Color(0xFF9B30FF),
+    Color(0xFFFFC15E), // orange doux
+    Color(0xFFFF8A5C), // orange plus soutenu
   ],
   begin: Alignment.topLeft,
   end: Alignment.bottomRight,
 );
 
-// Couleurs MODE SOMBRE "NEON NIGHT"
-const Color darkBackground = Color(0xFF0B0F2B);
+// =======================
+// MODE SOMBRE - "SUNSET NIGHT"
+// =======================
+
+const Color darkBackground = Color(0xFF0B0F2B); // on garde ton fond sombre
 const Color darkTextPrimary = Color(0xFFFFFFFF);
 const Color darkTextSecondary = Color(0xFFAAB6D1);
-const Color darkAccent1 = Color(0xFFF72585);
-const Color darkAccent2 = Color(0xFF7209B7);
-const Color darkAccent3 = Color(0xFF3A0CA3);
-const Color darkBorder = Color(0xFF4361EE);
-const Color darkMessageColor = Color(0xFFA78BFA);
 
-// Couleurs MODE CLAIR "LUMINOUS DREAM"
-const Color lightBackground = Color(0xFFFDFBFF);
+// Accents chauds
+const Color darkAccent1 = Color(0xFFFFB648); // bouton principal / élément clé
+const Color darkAccent2 = Color(0xFFFF8A5C); // secondaire
+const Color darkAccent3 = Color(0xFFFFE27A); // survol / badges
+
+const Color darkBorder = Color(0xFFFFC26F);
+const Color darkMessageColor =
+    Color(0xFFFFD89B); // bulles messages / highlights
+
+// =======================
+// MODE CLAIR - "PEACHY DAWN"
+// =======================
+
+const Color lightBackground = Color(0xFFFFF7EC); // crème chaud (style mockup)
 const Color lightTextPrimary = Color(0xFF1E1E2F);
 const Color lightTextSecondary = Color(0xFF5E5E6D);
-const Color lightAccent1 = Color(0xFFFF5DB1);
-const Color lightAccent2 = Color(0xFF8E77FF);
-const Color lightAccent3 = Color(0xFF6C63FF);
-const Color lightBorder = Color(0xFFD6D6F7);
+
+const Color lightAccent1 = Color(0xFFFFA45C); // orange principal
+const Color lightAccent2 = Color(0xFFFFC15E); // jaune-orangé
+const Color lightAccent3 = Color(0xFFFFE5A5); // éléments subtils
+
+const Color lightBorder = Color(0xFFFDD5A5);
 
 // Dégradés pour les boutons
 const Gradient darkButtonGradient = LinearGradient(
@@ -47,7 +60,7 @@ const String fontFamily = 'Poppins';
 // Glow BoxShadow pour mode sombre
 const List<BoxShadow> darkGlowShadow = [
   BoxShadow(
-    color: Color.fromRGBO(114, 9, 183, 0.5),
+    color: Color.fromRGBO(255, 138, 92, 0.5), // glow orangé
     blurRadius: 12,
     spreadRadius: 1,
   ),
@@ -72,7 +85,7 @@ final ThemeData darkTheme = ThemeData(
     secondary: darkAccent1,
     background: darkBackground,
     onBackground: darkTextPrimary,
-    surface: Color(0xFF121429), // un peu plus clair pour les cards
+    surface: const Color(0xFF121429),
     onSurface: darkTextPrimary,
   ),
   textTheme: TextTheme(
@@ -106,33 +119,35 @@ final ThemeData darkTheme = ThemeData(
   ),
   inputDecorationTheme: InputDecorationTheme(
     filled: true,
-    fillColor: Color(0xFF121429),
+    fillColor: const Color(0xFF121429),
     border: OutlineInputBorder(
       borderRadius: BorderRadius.circular(12),
-      borderSide: BorderSide(color: darkBorder),
+      borderSide: const BorderSide(color: darkBorder),
     ),
     enabledBorder: OutlineInputBorder(
       borderRadius: BorderRadius.circular(12),
-      borderSide: BorderSide(color: darkBorder),
+      borderSide: const BorderSide(color: darkBorder),
     ),
     focusedBorder: OutlineInputBorder(
       borderRadius: BorderRadius.circular(12),
-      borderSide: BorderSide(color: darkAccent1, width: 2),
+      borderSide: const BorderSide(color: darkAccent1, width: 2),
     ),
-    hintStyle: TextStyle(color: darkTextSecondary),
+    hintStyle: const TextStyle(color: darkTextSecondary),
   ),
   elevatedButtonTheme: ElevatedButtonThemeData(
     style: ButtonStyle(
       padding: MaterialStateProperty.all(
-          EdgeInsets.symmetric(vertical: 15, horizontal: 50)),
+        const EdgeInsets.symmetric(vertical: 15, horizontal: 50),
+      ),
       shape: MaterialStateProperty.all(
         RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       ),
       elevation: MaterialStateProperty.all(0),
       backgroundColor: MaterialStateProperty.resolveWith<Color>((states) {
-        if (states.contains(MaterialState.pressed))
+        if (states.contains(MaterialState.pressed)) {
           return darkAccent1.withOpacity(0.8);
-        return Colors.transparent; // on utilise dégradé avec container
+        }
+        return Colors.transparent; // dégradé via container
       }),
       shadowColor: MaterialStateProperty.all(Colors.transparent),
       overlayColor: MaterialStateProperty.all(darkAccent1.withOpacity(0.2)),
@@ -140,7 +155,7 @@ final ThemeData darkTheme = ThemeData(
     ),
   ),
   cardTheme: CardThemeData(
-    color: Color(0xFF121429),
+    color: const Color(0xFF121429),
     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
     shadowColor: Colors.transparent,
     elevation: 0,
@@ -199,22 +214,23 @@ final ThemeData lightTheme = ThemeData(
     fillColor: Colors.white,
     border: OutlineInputBorder(
       borderRadius: BorderRadius.circular(12),
-      borderSide: BorderSide(color: lightBorder),
+      borderSide: const BorderSide(color: lightBorder),
     ),
     enabledBorder: OutlineInputBorder(
       borderRadius: BorderRadius.circular(12),
-      borderSide: BorderSide(color: lightBorder),
+      borderSide: const BorderSide(color: lightBorder),
     ),
     focusedBorder: OutlineInputBorder(
       borderRadius: BorderRadius.circular(12),
-      borderSide: BorderSide(color: lightAccent1, width: 2),
+      borderSide: const BorderSide(color: lightAccent1, width: 2),
     ),
-    hintStyle: TextStyle(color: lightTextSecondary),
+    hintStyle: const TextStyle(color: lightTextSecondary),
   ),
   elevatedButtonTheme: ElevatedButtonThemeData(
     style: ButtonStyle(
       padding: MaterialStateProperty.all(
-          EdgeInsets.symmetric(vertical: 15, horizontal: 50)),
+        const EdgeInsets.symmetric(vertical: 15, horizontal: 50),
+      ),
       shape: MaterialStateProperty.all(
         RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       ),

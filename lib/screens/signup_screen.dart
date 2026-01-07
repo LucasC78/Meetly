@@ -132,7 +132,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
               child: Column(
                 children: [
                   Text(
-                    'Crée Ton Compte',
+                    'Créer Ton Compte',
                     style: theme.textTheme.displayLarge?.copyWith(
                       color: isDark ? darkAccent1 : lightAccent1,
                       shadows: [

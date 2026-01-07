@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+
 import 'package:Meetly/config/theme.dart';
 import 'package:Meetly/widgets/burger_menu.dart';
+import 'package:Meetly/widgets/custom_bottom_nav_bar.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -16,6 +18,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   String? userBio;
   String? userPseudo;
   String? userProfilePicture;
+
   final String currentUserId = FirebaseAuth.instance.currentUser!.uid;
 
   @override
@@ -49,20 +52,34 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Future<void> _deletePost(String postId) async {
+    final theme = Theme.of(context);
+
     final confirm = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
-        backgroundColor: darkBackground,
-        title: const Text('Supprimer le post'),
-        content: const Text('Voulez-vous vraiment supprimer ce post ?'),
+        backgroundColor: theme.colorScheme.surface,
+        title: Text(
+          'Supprimer le post',
+          style: TextStyle(color: theme.colorScheme.onSurface),
+        ),
+        content: Text(
+          'Voulez-vous vraiment supprimer ce post ?',
+          style: TextStyle(color: theme.colorScheme.onSurface),
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('Annuler'),
+            child: Text(
+              'Annuler',
+              style: TextStyle(color: theme.colorScheme.primary),
+            ),
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('Supprimer', style: TextStyle(color: Colors.red)),
+            child: const Text(
+              'Supprimer',
+              style: TextStyle(color: Colors.red),
+            ),
           ),
         ],
       ),
@@ -70,9 +87,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
     if (confirm == true) {
       await FirebaseFirestore.instance.collection('posts').doc(postId).delete();
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Post supprimé')));
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Post supprimé')),
+      );
     }
   }
 
@@ -83,13 +101,21 @@ class _ProfileScreenState extends State<ProfileScreen> {
           .where('userId', isEqualTo: currentUserId)
           .snapshots(),
       builder: (context, snapshot) {
+        final theme = Theme.of(context);
+
         if (!snapshot.hasData) {
           return const Center(child: CircularProgressIndicator());
         }
 
         final posts = snapshot.data!.docs;
-        if (posts.isEmpty)
-          return const Center(child: Text("Aucun post disponible."));
+        if (posts.isEmpty) {
+          return Center(
+            child: Text(
+              "Aucun post disponible.",
+              style: theme.textTheme.bodyMedium,
+            ),
+          );
+        }
 
         return GridView.builder(
           shrinkWrap: true,
@@ -125,15 +151,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       width: double.infinity,
                       padding: const EdgeInsets.all(2),
                       decoration: BoxDecoration(
-                        gradient: const LinearGradient(
-                          colors: [Color(0xFFFF00FF), Color(0xFF9B30FF)],
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                        ),
+                        gradient: pinkGradient,
                         borderRadius: BorderRadius.circular(30),
-                        boxShadow: const [
+                        boxShadow: [
                           BoxShadow(
-                            color: Color(0xFF9B30FF), // Glow violet
+                            color: theme.colorScheme.primary.withOpacity(0.6),
                             blurRadius: 5,
                             spreadRadius: 1,
                           ),
@@ -141,7 +163,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       ),
                       child: Container(
                         decoration: BoxDecoration(
-                          color: darkBackground,
+                          color: theme.colorScheme.surface,
                           borderRadius: BorderRadius.circular(30),
                         ),
                         child: TextButton(
@@ -156,12 +178,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               borderRadius: BorderRadius.circular(30),
                             ),
                           ),
-                          child: const Text(
+                          child: Text(
                             'Delete',
                             style: TextStyle(
                               fontSize: 16,
                               fontWeight: FontWeight.bold,
-                              color: Colors.pinkAccent,
+                              color: theme.colorScheme.secondary,
                             ),
                           ),
                         ),
@@ -184,14 +206,22 @@ class _ProfileScreenState extends State<ProfileScreen> {
           .doc(currentUserId)
           .get(),
       builder: (context, snapshot) {
-        if (!snapshot.hasData)
+        if (!snapshot.hasData) {
           return const Center(child: CircularProgressIndicator());
+        }
 
+        final theme = Theme.of(context);
         final data = snapshot.data!.data() as Map<String, dynamic>;
         final List<dynamic> following = data['following'] ?? [];
 
-        if (following.isEmpty)
-          return const Center(child: Text('Aucun utilisateur suivi.'));
+        if (following.isEmpty) {
+          return Center(
+            child: Text(
+              'Aucun utilisateur suivi.',
+              style: theme.textTheme.bodyMedium,
+            ),
+          );
+        }
 
         return ListView.builder(
           itemCount: following.length,
@@ -201,10 +231,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
             return FutureBuilder<DocumentSnapshot>(
               future:
                   FirebaseFirestore.instance.collection('users').doc(id).get(),
-              builder: (context, snapshot) {
-                if (!snapshot.hasData) return const SizedBox.shrink();
+              builder: (context, snap) {
+                if (!snap.hasData) return const SizedBox.shrink();
 
-                final user = snapshot.data!.data() as Map<String, dynamic>;
+                final user = snap.data!.data() as Map<String, dynamic>;
 
                 return ListTile(
                   leading: CircleAvatar(
@@ -230,14 +260,22 @@ class _ProfileScreenState extends State<ProfileScreen> {
           .doc(currentUserId)
           .get(),
       builder: (context, snapshot) {
-        if (!snapshot.hasData)
+        if (!snapshot.hasData) {
           return const Center(child: CircularProgressIndicator());
+        }
 
+        final theme = Theme.of(context);
         final data = snapshot.data!.data() as Map<String, dynamic>;
         final List<dynamic> followers = data['followers'] ?? [];
 
-        if (followers.isEmpty)
-          return const Center(child: Text('Aucun follower.'));
+        if (followers.isEmpty) {
+          return Center(
+            child: Text(
+              'Aucun follower.',
+              style: theme.textTheme.bodyMedium,
+            ),
+          );
+        }
 
         return ListView.builder(
           itemCount: followers.length,
@@ -247,10 +285,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
             return FutureBuilder<DocumentSnapshot>(
               future:
                   FirebaseFirestore.instance.collection('users').doc(id).get(),
-              builder: (context, snapshot) {
-                if (!snapshot.hasData) return const SizedBox.shrink();
+              builder: (context, snap) {
+                if (!snap.hasData) return const SizedBox.shrink();
 
-                final user = snapshot.data!.data() as Map<String, dynamic>;
+                final user = snap.data!.data() as Map<String, dynamic>;
 
                 return ListTile(
                   leading: CircleAvatar(
@@ -277,11 +315,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
       length: 3,
       child: Scaffold(
         backgroundColor: theme.scaffoldBackgroundColor,
+
         drawer: BurgerMenu(
-          userId: FirebaseAuth.instance.currentUser!.uid, // 👈 Obligatoire
+          userId: FirebaseAuth.instance.currentUser!.uid,
           onNavigate: (route) => Navigator.pushNamed(context, route),
           onLogout: () => Navigator.pushReplacementNamed(context, '/login'),
         ),
+
         body: userPseudo == null
             ? const Center(child: CircularProgressIndicator())
             : SafeArea(
@@ -293,51 +333,49 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
+                      // HEADER
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           Builder(
                             builder: (context) => IconButton(
-                              icon: const Icon(
+                              icon: Icon(
                                 Icons.menu,
-                                color: Colors.pinkAccent,
+                                color: theme.colorScheme.secondary,
                               ),
                               onPressed: () =>
                                   Scaffold.of(context).openDrawer(),
                             ),
                           ),
-                          const Text(
+                          Text(
                             'Profile',
                             style: TextStyle(
                               fontSize: 28,
                               fontWeight: FontWeight.bold,
-                              color: Colors.pinkAccent,
+                              color: theme.colorScheme.secondary,
                             ),
                           ),
-                          const Icon(
+                          Icon(
                             Icons.circle_outlined,
-                            color: Colors.pinkAccent,
+                            color: theme.colorScheme.secondary,
                           ),
                         ],
                       ),
+
                       const SizedBox(height: 16),
+
+                      // AVATAR
                       Container(
                         width: 150,
                         height: 150,
                         padding: const EdgeInsets.all(4),
-                        decoration: BoxDecoration(
+                        decoration: const BoxDecoration(
                           shape: BoxShape.circle,
-                          gradient: const LinearGradient(
-                            colors: [Color(0xFFFF00FF), Color(0xFF9B30FF)],
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                          ),
+                          gradient: pinkGradient,
                         ),
                         child: CircleAvatar(
                           radius: 50,
-                          backgroundColor: Theme.of(
-                            context,
-                          ).scaffoldBackgroundColor,
+                          backgroundColor: theme.scaffoldBackgroundColor,
                           child: userProfilePicture != null &&
                                   userProfilePicture!.isNotEmpty
                               ? ClipOval(
@@ -348,15 +386,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                     height: double.infinity,
                                   ),
                                 )
-                              : const Icon(
+                              : Icon(
                                   Icons.person,
                                   size: 64,
-                                  color: Colors.pinkAccent,
+                                  color: theme.colorScheme.secondary,
                                 ),
                         ),
                       ),
 
                       const SizedBox(height: 16),
+
                       Text(
                         userPseudo!,
                         style: theme.textTheme.titleLarge?.copyWith(
@@ -364,24 +403,25 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           fontSize: 22,
                         ),
                       ),
+
                       const SizedBox(height: 4),
+
                       Text(
                         userBio ?? '',
                         style: theme.textTheme.bodyMedium,
                         textAlign: TextAlign.center,
                       ),
+
                       const SizedBox(height: 16),
+
+                      // EDIT PROFILE BUTTON
                       Container(
                         decoration: BoxDecoration(
-                          gradient: const LinearGradient(
-                            colors: [Color(0xFFFF00FF), Color(0xFF9B30FF)],
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                          ),
+                          gradient: pinkGradient,
                           borderRadius: BorderRadius.circular(30),
-                          boxShadow: const [
+                          boxShadow: [
                             BoxShadow(
-                              color: Color(0xFF9B30FF),
+                              color: theme.colorScheme.primary.withOpacity(0.6),
                               blurRadius: 5,
                               spreadRadius: 1,
                             ),
@@ -391,7 +431,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         child: Container(
                           width: 180,
                           decoration: BoxDecoration(
-                            color: darkBackground,
+                            color: theme.colorScheme.surface,
                             borderRadius: BorderRadius.circular(30),
                           ),
                           alignment: Alignment.center,
@@ -409,36 +449,39 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                 borderRadius: BorderRadius.circular(30),
                               ),
                             ),
-                            child: const Text(
+                            child: Text(
                               'Edit Profile',
                               style: TextStyle(
                                 fontSize: 16,
                                 fontWeight: FontWeight.bold,
-                                color: Colors.pinkAccent,
+                                color: theme.colorScheme.secondary,
                               ),
                             ),
                           ),
                         ),
                       ),
+
                       const SizedBox(height: 20),
 
-                      // 🟣 Onglets
-                      const TabBar(
-                        indicatorColor: Colors.pinkAccent,
-                        labelColor: Colors.white,
-                        unselectedLabelColor: Colors.white54,
-                        labelStyle: TextStyle(fontWeight: FontWeight.bold),
-                        tabs: [
+                      // TABS
+                      TabBar(
+                        indicatorColor: theme.colorScheme.secondary,
+                        labelColor: theme.colorScheme.secondary,
+                        unselectedLabelColor:
+                            theme.colorScheme.onBackground.withOpacity(0.6),
+                        labelStyle:
+                            const TextStyle(fontWeight: FontWeight.bold),
+                        tabs: const [
                           Tab(text: 'Posts'),
                           Tab(text: 'Followers'),
                           Tab(text: 'Following'),
                         ],
                       ),
+
                       const SizedBox(height: 16),
 
-                      // 🟣 Contenu des onglets
                       SizedBox(
-                        height: 500, // à ajuster selon ta page
+                        height: 500,
                         child: TabBarView(
                           children: [
                             _buildUserPosts(),
@@ -451,6 +494,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ),
                 ),
               ),
+
+        // ✅ BOTTOM BAR ICI
+        bottomNavigationBar: CustomBottomNavBar(
+          selectedIndex: 3, // ✅ PROFIL
+          onItemTapped: (index) {
+            if (index == 0) Navigator.pushNamed(context, '/home');
+            if (index == 1) Navigator.pushNamed(context, '/search');
+            if (index == 2) Navigator.pushNamed(context, '/addpost');
+            if (index == 3) return;
+          },
+        ),
       ),
     );
   }

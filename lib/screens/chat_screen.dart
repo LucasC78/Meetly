@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:Meetly/config/theme.dart';
 import '../services/chat_service.dart';
 
 class ChatScreen extends StatefulWidget {
@@ -195,27 +196,43 @@ class _ChatScreenState extends State<ChatScreen> {
                   child: Container(
                     decoration: BoxDecoration(
                       borderRadius: BorderRadius.circular(28),
-                      border: Border.all(color: Colors.cyanAccent, width: 1.5),
+                      border: Border.all(
+                        color: Theme.of(context).colorScheme.primary,
+                        width: 1.5,
+                      ),
                     ),
                     padding: const EdgeInsets.symmetric(horizontal: 16),
                     child: TextField(
                       controller: _controller,
-                      style: const TextStyle(color: Colors.white),
-                      decoration: const InputDecoration(
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.onBackground,
+                      ),
+                      decoration: InputDecoration(
+                        // 🔒 on neutralise complètement les bordures internes
                         border: InputBorder.none,
                         enabledBorder: InputBorder.none,
                         focusedBorder: InputBorder.none,
                         disabledBorder: InputBorder.none,
+
                         hintText: 'Message...',
-                        hintStyle: TextStyle(color: Colors.cyanAccent),
-                        icon: Icon(Icons.chat_bubble_outline,
-                            color: Colors.cyanAccent),
-                        contentPadding: EdgeInsets.symmetric(vertical: 12),
+                        hintStyle: TextStyle(
+                          color: Theme.of(context)
+                              .colorScheme
+                              .primary
+                              .withOpacity(0.9),
+                        ),
+                        icon: Icon(
+                          Icons.chat_bubble_outline,
+                          color: Theme.of(context).colorScheme.primary,
+                        ),
+
+                        contentPadding:
+                            const EdgeInsets.symmetric(vertical: 12),
                         isCollapsed: true,
-                        filled:
-                            false, // <= assure que le champ n'est pas rempli (donc pas de fond)
-                        fillColor: Colors
-                            .transparent, // <= au cas où, on force aussi ici
+
+                        // 🔒 pas de fond interne
+                        filled: false,
+                        fillColor: Colors.transparent,
                       ),
                     ),
                   ),
@@ -225,20 +242,16 @@ class _ChatScreenState extends State<ChatScreen> {
                   onTap: _sendMessage,
                   child: Container(
                     padding: const EdgeInsets.all(14),
-                    decoration: const BoxDecoration(
+                    decoration: BoxDecoration(
                       shape: BoxShape.circle,
-                      gradient: LinearGradient(
-                        colors: [Color(0xFFFF00FF), Color(0xFF9B30FF)],
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                      ),
+                      gradient: pinkGradient, // ton dégradé orange
                     ),
                     child: const Icon(Icons.send, color: Colors.white),
                   ),
                 ),
               ],
             ),
-          ),
+          )
         ],
       ),
     );

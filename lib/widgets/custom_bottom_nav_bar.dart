@@ -12,13 +12,16 @@ class CustomBottomNavBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        // Trait violet au-dessus
+        // ✅ Trait supérieur (orange thème)
         Container(
           height: 1,
-          color: const Color(0xFF9F6BFF), // Violet clair
+          color: theme.colorScheme.primary.withOpacity(0.4),
         ),
         SafeArea(
           child: Padding(
@@ -53,17 +56,22 @@ class CustomBottomNavBar extends StatelessWidget {
                     children: [
                       Icon(
                         icon,
-                        color: Colors.cyanAccent,
                         size: 28,
+                        color: isSelected
+                            ? theme.colorScheme.secondary // 🔥 orange actif
+                            : theme.colorScheme.onBackground
+                                .withOpacity(0.6), // neutre
                       ),
-                      const SizedBox(height: 4),
+                      const SizedBox(height: 6),
+
+                      // ✅ Indicateur animé orange
                       AnimatedContainer(
                         duration: const Duration(milliseconds: 300),
-                        height: 2,
+                        height: 3,
                         width: isSelected ? 22 : 0,
                         decoration: BoxDecoration(
-                          color: const Color(0xFFA78BFA),
-                          borderRadius: BorderRadius.circular(1),
+                          color: theme.colorScheme.secondary,
+                          borderRadius: BorderRadius.circular(2),
                         ),
                       ),
                     ],
