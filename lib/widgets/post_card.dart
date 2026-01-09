@@ -67,27 +67,25 @@ class PostCard extends StatelessWidget {
 
     try {
       await FirebaseFirestore.instance.runTransaction((tx) async {
-        // 1) Check déjà signalé ?
+        // ✅ 1) TOUS LES READS D'ABORD
         final reportSnap = await tx.get(reportRef);
         if (reportSnap.exists) {
-          return; // déjà signalé
+          // déjà signalé -> on stop
+          return;
         }
 
-        // 2) Crée le report doc (anti double signalement)
+        final postSnap = await tx.get(postRef);
+        final data = postSnap.data() as Map<String, dynamic>? ?? {};
+        final currentCount =
+            (data['reportCount'] is int) ? data['reportCount'] as int : 0;
+        final newCount = currentCount + 1;
+        final shouldHide = newCount >= reportThreshold;
+
+        // ✅ 2) ENSUITE SEULEMENT LES WRITES
         tx.set(reportRef, {
           'userId': uid,
           'reportedAt': FieldValue.serverTimestamp(),
         });
-
-        // 3) Incrémente reportCount + éventuellement isHidden
-        final postSnap = await tx.get(postRef);
-        final data = postSnap.data() as Map<String, dynamic>? ?? {};
-
-        final currentCount =
-            (data['reportCount'] is int) ? data['reportCount'] as int : 0;
-        final newCount = currentCount + 1;
-
-        final shouldHide = newCount >= reportThreshold;
 
         tx.update(postRef, {
           'reportCount': newCount,

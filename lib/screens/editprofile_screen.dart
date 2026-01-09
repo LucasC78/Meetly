@@ -155,7 +155,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                     Navigator.pushReplacementNamed(context, '/home'),
               ),
         title: Text(
-          'Edit Profile',
+          'Modifier le profil',
           style: theme.textTheme.titleLarge?.copyWith(
             color: theme.colorScheme.secondary,
             fontWeight: FontWeight.bold,
@@ -225,7 +225,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
               controller: _pseudoController,
               style: TextStyle(color: theme.colorScheme.onBackground),
               decoration: InputDecoration(
-                labelText: 'Your Pseudo',
+                labelText: 'Pseudo',
                 labelStyle: TextStyle(color: theme.colorScheme.primary),
               ),
             ),
@@ -237,7 +237,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
               controller: _bioController,
               style: TextStyle(color: theme.colorScheme.onBackground),
               decoration: InputDecoration(
-                labelText: 'Your Bio',
+                labelText: 'Bio',
                 labelStyle: TextStyle(color: theme.colorScheme.primary),
               ),
             ),
@@ -268,7 +268,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                   ),
                 ),
                 child: Text(
-                  'Save Changes',
+                  'Sauvegarder les changements',
                   style: theme.textTheme.titleMedium?.copyWith(
                     color: theme.colorScheme.onBackground,
                     fontWeight: FontWeight.bold,

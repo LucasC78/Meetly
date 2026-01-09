@@ -5,10 +5,13 @@ import 'routes.dart';
 import 'package:cloudinary_flutter/cloudinary_context.dart';
 import 'package:cloudinary_url_gen/cloudinary.dart';
 import 'package:Meetly/config/theme.dart'; // <== Ajouté pour accéder à tes thèmes personnalisés
+import 'package:Meetly/services/push_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+
+  await PushService.init(); // ✅ AJOUT ICI
 
   CloudinaryContext.cloudinary = Cloudinary.fromCloudName(
     cloudName: 'dzvqcdfdg',
@@ -42,7 +45,7 @@ class _MyAppState extends State<MyApp> {
       title: 'Meetly',
       theme: lightTheme, // <-- Thème clair personnalisé
       darkTheme: darkTheme, // <-- Thème sombre personnalisé
-      themeMode: ThemeMode.dark, // 👈 forcer le thème sombre
+      themeMode: ThemeMode.system, // 👈 forcer le thème sombre
       initialRoute: '/splash',
       routes: Routes.getRoutes(),
       // Pour basculer le thème depuis une autre page,

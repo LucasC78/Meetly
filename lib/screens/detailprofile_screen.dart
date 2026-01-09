@@ -29,14 +29,25 @@ class _DetailProfilePageState extends State<DetailProfilePage> {
   final Set<String> _showCommentInputFor = {};
   final Map<String, int> _visibleCommentCounts = {};
 
-  // ✅ Saved posts service (pour que l'icône bookmark soit cochée/décochée)
+  // ✅ BLOCK STATES
+  bool _loadingBlockStatus = true;
+  bool _iBlockedHim = false; // currentUser -> other
+  bool _heBlockedMe = false; // other -> currentUser
+  bool get _blockedEitherWay => _iBlockedHim || _heBlockedMe;
 
   @override
   void initState() {
     super.initState();
-    fetchUserData();
-    fetchCurrentUserImage();
-    checkIfFollowing();
+    _initAll();
+  }
+
+  Future<void> _initAll() async {
+    await Future.wait([
+      fetchUserData(),
+      fetchCurrentUserImage(),
+      checkIfFollowing(),
+      _checkBlockStatus(),
+    ]);
   }
 
   @override
@@ -47,6 +58,161 @@ class _DetailProfilePageState extends State<DetailProfilePage> {
     super.dispose();
   }
 
+  // -----------------------
+  // BLOCK REFS
+  // -----------------------
+  DocumentReference<Map<String, dynamic>> _myBlockRef() {
+    return FirebaseFirestore.instance
+        .collection('users')
+        .doc(currentUserId)
+        .collection('blocked')
+        .doc(widget.userId);
+  }
+
+  DocumentReference<Map<String, dynamic>> _hisBlockRef() {
+    return FirebaseFirestore.instance
+        .collection('users')
+        .doc(widget.userId)
+        .collection('blocked')
+        .doc(currentUserId);
+  }
+
+  Future<void> _checkBlockStatus() async {
+    setState(() => _loadingBlockStatus = true);
+
+    try {
+      final my = await _myBlockRef().get();
+      final his = await _hisBlockRef().get();
+
+      if (!mounted) return;
+      setState(() {
+        _iBlockedHim = my.exists;
+        _heBlockedMe = his.exists;
+        _loadingBlockStatus = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _loadingBlockStatus = false);
+    }
+  }
+
+  Future<void> _blockUser() async {
+    try {
+      await _myBlockRef().set({
+        'blockedAt': FieldValue.serverTimestamp(),
+      });
+
+      if (!mounted) return;
+      setState(() {
+        _iBlockedHim = true;
+        // _blockedEitherWay devient true automatiquement
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Utilisateur bloqué.")),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Erreur blocage: $e")),
+      );
+    }
+  }
+
+  Future<void> _unblockUser() async {
+    try {
+      await _myBlockRef().delete();
+
+      if (!mounted) return;
+      setState(() {
+        _iBlockedHim = false;
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Utilisateur débloqué.")),
+      );
+
+      // Recharge le profil normalement
+      await _initAll();
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Erreur déblocage: $e")),
+      );
+    }
+  }
+
+  void _openBlockMenu() {
+    final theme = Theme.of(context);
+
+    // Pas de menu blocage si tu regardes ton propre profil
+    if (widget.userId == currentUserId) return;
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (_) {
+        return Container(
+          margin: const EdgeInsets.all(16),
+          padding: const EdgeInsets.symmetric(vertical: 10),
+          decoration: BoxDecoration(
+            color: theme.cardColor,
+            borderRadius: BorderRadius.circular(20),
+            boxShadow: theme.brightness == Brightness.dark
+                ? darkGlowShadow
+                : lightSoftShadow,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (_iBlockedHim)
+                ListTile(
+                  leading:
+                      Icon(Icons.lock_open, color: theme.colorScheme.secondary),
+                  title: Text(
+                    "Débloquer @${userData?['pseudo'] ?? ''}",
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w700,
+                      color: theme.colorScheme.secondary,
+                    ),
+                  ),
+                  onTap: () async {
+                    Navigator.pop(context);
+                    await _unblockUser();
+                  },
+                )
+              else
+                ListTile(
+                  leading:
+                      Icon(Icons.block, color: theme.colorScheme.secondary),
+                  title: Text(
+                    "Bloquer @${userData?['pseudo'] ?? ''}",
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w700,
+                      color: theme.colorScheme.secondary,
+                    ),
+                  ),
+                  subtitle: const Text(
+                      "Tu ne verras plus ses posts / messages (et inversement côté UX)."),
+                  onTap: () async {
+                    Navigator.pop(context);
+                    await _blockUser();
+                  },
+                ),
+              const Divider(height: 1),
+              ListTile(
+                leading: Icon(Icons.close, color: theme.colorScheme.primary),
+                title: Text("Annuler", style: theme.textTheme.titleMedium),
+                onTap: () => Navigator.pop(context),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  // -----------------------
+  // DATA
+  // -----------------------
   Future<void> fetchUserData() async {
     final doc = await FirebaseFirestore.instance
         .collection('users')
@@ -55,6 +221,7 @@ class _DetailProfilePageState extends State<DetailProfilePage> {
 
     if (doc.exists) {
       final data = doc.data()!;
+      if (!mounted) return;
       setState(() {
         userData = data;
         followersCount = (data['followers'] as List?)?.length ?? 0;
@@ -71,6 +238,7 @@ class _DetailProfilePageState extends State<DetailProfilePage> {
 
     if (doc.exists) {
       final data = doc.data();
+      if (!mounted) return;
       setState(() {
         currentUserImageUrl = data?['profilepicture'];
       });
@@ -86,6 +254,7 @@ class _DetailProfilePageState extends State<DetailProfilePage> {
     if (snapshot.exists) {
       final data = snapshot.data();
       final following = List<String>.from(data?['following'] ?? []);
+      if (!mounted) return;
       setState(() {
         isFollowing = following.contains(widget.userId);
       });
@@ -93,6 +262,15 @@ class _DetailProfilePageState extends State<DetailProfilePage> {
   }
 
   Future<void> toggleFollow() async {
+    // ✅ blocage -> pas follow
+    if (_blockedEitherWay) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+            content: Text("Action impossible : utilisateur bloqué.")),
+      );
+      return;
+    }
+
     final userRef =
         FirebaseFirestore.instance.collection('users').doc(widget.userId);
     final currentUserRef =
@@ -123,19 +301,34 @@ class _DetailProfilePageState extends State<DetailProfilePage> {
     }
   }
 
+  // -----------------------
+  // UI
+  // -----------------------
   @override
   Widget build(BuildContext context) {
-    if (userData == null) {
+    final theme = Theme.of(context);
+
+    if (userData == null || _loadingBlockStatus) {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
-    final theme = Theme.of(context);
+    // ✅ Si bloqué dans un sens ou l'autre => écran spécial
+    if (_blockedEitherWay) {
+      return _buildBlockedProfileScreen(theme);
+    }
+
     final String? profileImageUrl = userData!['profilepicture'];
 
     return Scaffold(
       appBar: AppBar(
         title: Text("${userData!['pseudo']}"),
         actions: [
+          // ✅ menu blocage (3 points)
+          IconButton(
+            onPressed: _openBlockMenu,
+            icon: Icon(Icons.more_horiz, color: theme.colorScheme.primary),
+          ),
+
           if (currentUserImageUrl != null && currentUserImageUrl!.isNotEmpty)
             Padding(
               padding: const EdgeInsets.only(right: 12),
@@ -236,7 +429,7 @@ class _DetailProfilePageState extends State<DetailProfilePage> {
                             (ud['profilepicture'] ?? '').toString();
 
                         return PostCard(
-                          postId: postId, // ✅ OBLIGATOIRE
+                          postId: postId,
                           userId: userId,
                           username: username,
                           imageUrl: imageUrl,
@@ -244,8 +437,6 @@ class _DetailProfilePageState extends State<DetailProfilePage> {
                           likeCount: likes.length,
                           isLiked: isLiked,
                           userProfilePicture: userProfilePicture,
-
-                          // ❤️ Like
                           onLikePressed: () async {
                             final postRef = FirebaseFirestore.instance
                                 .collection('posts')
@@ -263,12 +454,11 @@ class _DetailProfilePageState extends State<DetailProfilePage> {
                                 updatedLikes.add(currentUserId);
                               }
 
-                              transaction
-                                  .update(postRef, {'likes': updatedLikes});
+                              transaction.update(postRef, {
+                                'likes': updatedLikes,
+                              });
                             });
                           },
-
-                          // 💬 Commentaires
                           onCommentIconPressed: () {
                             setState(() {
                               if (isInputVisible) {
@@ -278,12 +468,9 @@ class _DetailProfilePageState extends State<DetailProfilePage> {
                               }
                             });
                           },
-
-                          // 🔖 ENREGISTREMENT (la clé du problème)
                           onToggleSave: () =>
                               _savedPostsService.toggleSave(postId),
                           isSavedStream: _savedPostsService.isSaved(postId),
-
                           commentInput: isInputVisible
                               ? _buildCommentInput(postId)
                               : null,
@@ -299,6 +486,67 @@ class _DetailProfilePageState extends State<DetailProfilePage> {
             ],
           );
         },
+      ),
+    );
+  }
+
+  // ✅ Profil bloqué : bouton Débloquer seulement si TU l’as bloqué
+  Widget _buildBlockedProfileScreen(ThemeData theme) {
+    final msg = _heBlockedMe
+        ? "Cet utilisateur t'a bloqué."
+        : "Tu as bloqué cet utilisateur.";
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text("Profil"),
+        actions: [
+          // ✅ si tu l'as bloqué, tu peux aussi débloquer via menu
+          if (_iBlockedHim)
+            IconButton(
+              onPressed: _openBlockMenu,
+              icon: Icon(Icons.more_horiz, color: theme.colorScheme.primary),
+            ),
+        ],
+      ),
+      body: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.block, size: 64, color: theme.colorScheme.secondary),
+              const SizedBox(height: 12),
+              Text(
+                "Profil bloqué",
+                style: theme.textTheme.titleLarge?.copyWith(
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                msg,
+                textAlign: TextAlign.center,
+                style: theme.textTheme.bodyMedium,
+              ),
+              const SizedBox(height: 20),
+              if (_iBlockedHim)
+                ElevatedButton.icon(
+                  onPressed: _unblockUser,
+                  icon: const Icon(Icons.lock_open),
+                  label: const Text("Débloquer cet utilisateur"),
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 24, vertical: 14),
+                  ),
+                ),
+              const SizedBox(height: 12),
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text("Retour"),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -339,13 +587,13 @@ class _DetailProfilePageState extends State<DetailProfilePage> {
         ),
         const SizedBox(height: 12),
         Text(
-          userData!['pseudo'],
+          (userData?['pseudo'] ?? '').toString(),
           style: theme.textTheme.titleLarge?.copyWith(
             fontWeight: FontWeight.bold,
             fontSize: 22,
           ),
         ),
-        if (userData!['bio'] != null &&
+        if (userData?['bio'] != null &&
             userData!['bio'].toString().trim().isNotEmpty)
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 8.0),
@@ -368,7 +616,7 @@ class _DetailProfilePageState extends State<DetailProfilePage> {
         Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            // ✅ Follow
+            // ✅ Follow (désactivé si blocage)
             Container(
               decoration: BoxDecoration(
                 gradient: pinkGradient,
@@ -390,23 +638,15 @@ class _DetailProfilePageState extends State<DetailProfilePage> {
                 ),
                 alignment: Alignment.center,
                 child: TextButton(
-                  onPressed: toggleFollow,
-                  style: TextButton.styleFrom(
-                    backgroundColor: Colors.transparent,
-                    padding: const EdgeInsets.symmetric(
-                      vertical: 12,
-                      horizontal: 24,
-                    ),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(30),
-                    ),
-                  ),
+                  onPressed: _blockedEitherWay ? null : toggleFollow,
                   child: Text(
                     isFollowing ? 'Se désabonner' : 'S\'abonner',
                     style: TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.bold,
-                      color: theme.colorScheme.secondary,
+                      color: _blockedEitherWay
+                          ? Colors.grey
+                          : theme.colorScheme.secondary,
                     ),
                   ),
                 ),
@@ -414,7 +654,7 @@ class _DetailProfilePageState extends State<DetailProfilePage> {
             ),
             const SizedBox(width: 12),
 
-            // ✅ Message
+            // ✅ Message (désactivé si blocage)
             Container(
               decoration: BoxDecoration(
                 gradient: pinkGradient,
@@ -436,34 +676,33 @@ class _DetailProfilePageState extends State<DetailProfilePage> {
                 ),
                 alignment: Alignment.center,
                 child: TextButton.icon(
-                  onPressed: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => ChatScreen(
-                          currentUserId: currentUserId,
-                          otherUserId: widget.userId,
-                        ),
-                      ),
-                    );
-                  },
-                  icon: Icon(Icons.message, color: theme.colorScheme.secondary),
+                  onPressed: _blockedEitherWay
+                      ? null
+                      : () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => ChatScreen(
+                                currentUserId: currentUserId,
+                                otherUserId: widget.userId,
+                              ),
+                            ),
+                          );
+                        },
+                  icon: Icon(
+                    Icons.message,
+                    color: _blockedEitherWay
+                        ? Colors.grey
+                        : theme.colorScheme.secondary,
+                  ),
                   label: Text(
                     "Message privé",
                     style: TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.bold,
-                      color: theme.colorScheme.secondary,
-                    ),
-                  ),
-                  style: TextButton.styleFrom(
-                    backgroundColor: Colors.transparent,
-                    padding: const EdgeInsets.symmetric(
-                      vertical: 12,
-                      horizontal: 16,
-                    ),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(30),
+                      color: _blockedEitherWay
+                          ? Colors.grey
+                          : theme.colorScheme.secondary,
                     ),
                   ),
                 ),
@@ -488,7 +727,6 @@ class _DetailProfilePageState extends State<DetailProfilePage> {
   // =========================
   // Commentaires
   // =========================
-
   Widget _buildCommentInput(String postId) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),

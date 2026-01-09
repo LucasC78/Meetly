@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:Meetly/services/auth_service.dart';
 import 'package:Meetly/config/theme.dart';
+import 'package:Meetly/services/notification_service.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -33,6 +34,8 @@ class _LoginScreenState extends State<LoginScreen> {
       );
 
       // Si connexion réussie
+      await NotificationService.saveFcmToken();
+      NotificationService.listenToTokenRefresh();
       Navigator.pushReplacementNamed(context, '/home');
     } on FirebaseAuthException catch (e) {
       print('Firebase Error Code: ${e.code}');
@@ -89,6 +92,8 @@ class _LoginScreenState extends State<LoginScreen> {
     });
 
     if (user != null) {
+      await NotificationService.saveFcmToken();
+      NotificationService.listenToTokenRefresh();
       Navigator.pushReplacementNamed(context, '/home');
     } else {
       // Ne rien faire : l'utilisateur a juste annulé

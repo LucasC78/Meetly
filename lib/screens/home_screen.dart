@@ -7,7 +7,10 @@ import 'package:Meetly/config/theme.dart';
 import 'package:Meetly/widgets/custom_bottom_nav_bar.dart';
 
 import 'package:Meetly/services/saved_posts_service.dart';
-import 'package:Meetly/widgets/post_card.dart'; // ✅ IMPORTANT : on utilise le vrai PostCard
+import 'package:Meetly/widgets/post_card.dart';
+
+// ✅ AJOUT
+import 'package:Meetly/services/block_service.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -31,6 +34,9 @@ class _HomeScreenState extends State<HomeScreen> {
   User? currentUser;
 
   final SavedPostsService _savedPostsService = SavedPostsService();
+
+  // ✅ AJOUT
+  final BlockService _blockService = BlockService();
 
   @override
   void initState() {
@@ -96,7 +102,6 @@ class _HomeScreenState extends State<HomeScreen> {
   void _addComment(String postId, String content) async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
-
     if (content.trim().isEmpty) return;
 
     await FirebaseFirestore.instance
@@ -240,11 +245,16 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final currentUid = FirebaseAuth.instance.currentUser?.uid;
+
+    if (currentUid == null) {
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
 
     return Scaffold(
       backgroundColor: theme.scaffoldBackgroundColor,
       drawer: BurgerMenu(
-        userId: FirebaseAuth.instance.currentUser!.uid,
+        userId: currentUid,
         onNavigate: (route) => Navigator.pushNamed(context, route),
         onLogout: () => Navigator.pushReplacementNamed(context, '/login'),
       ),
@@ -301,129 +311,148 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             )
           else
+            // ✅ 1) stream blocked
             Expanded(
-              child: StreamBuilder<QuerySnapshot>(
-                stream: FirebaseFirestore.instance
-                    .collection('posts')
-                    .orderBy('timestamp', descending: true)
-                    .snapshots(),
-                builder: (context, snapshot) {
-                  if (!snapshot.hasData) {
-                    return const Center(child: CircularProgressIndicator());
-                  }
+              child: StreamBuilder<Set<String>>(
+                stream: _blockService.blockedIdsStream(currentUid),
+                builder: (context, blockedSnap) {
+                  final blocked = blockedSnap.data ?? <String>{};
 
-                  final posts = snapshot.data!.docs;
+                  // ✅ 2) stream blockedBy
+                  return StreamBuilder<Set<String>>(
+                    stream: _blockService.blockedByIdsStream(currentUid),
+                    builder: (context, blockedBySnap) {
+                      final blockedBy = blockedBySnap.data ?? <String>{};
 
-                  return ListView.builder(
-                    itemCount: posts.length,
-                    itemBuilder: (context, index) {
-                      final post = posts[index];
-                      final data = post.data() as Map<String, dynamic>;
-
-                      final isHidden = (data['isHidden'] ?? false) as bool;
-                      if (isHidden) return const SizedBox.shrink();
-
-                      final postId = post.id;
-
-                      _commentControllers.putIfAbsent(
-                          postId, () => TextEditingController());
-                      _visibleCommentCounts.putIfAbsent(postId, () => 3);
-
-                      final content = (data['content'] ?? '').toString();
-                      final imageUrl = (data['imageUrl'] ?? '').toString();
-                      final userId = (data['userId'] ?? '').toString();
-
-                      final likes = List<String>.from(data['likes'] ?? []);
-                      final currentUid =
-                          FirebaseAuth.instance.currentUser?.uid ?? '';
-                      final isLiked = likes.contains(currentUid);
-
-                      final isInputVisible =
-                          _showCommentInputFor.contains(postId);
-
-                      return FutureBuilder<DocumentSnapshot>(
-                        future: FirebaseFirestore.instance
-                            .collection('users')
-                            .doc(userId)
-                            .get(),
-                        builder: (context, userSnapshot) {
-                          if (userSnapshot.connectionState ==
-                              ConnectionState.waiting) {
-                            return const SizedBox.shrink();
-                          }
-                          if (!userSnapshot.hasData ||
-                              userSnapshot.data == null) {
-                            return const SizedBox.shrink();
+                      // ✅ 3) stream posts
+                      return StreamBuilder<QuerySnapshot>(
+                        stream: FirebaseFirestore.instance
+                            .collection('posts')
+                            .orderBy('timestamp', descending: true)
+                            .snapshots(),
+                        builder: (context, snapshot) {
+                          if (!snapshot.hasData) {
+                            return const Center(
+                                child: CircularProgressIndicator());
                           }
 
-                          final userData = (userSnapshot.data!.data()
-                                  as Map<String, dynamic>?) ??
-                              {};
+                          final posts = snapshot.data!.docs;
 
-                          final pseudo =
-                              (userData['pseudo'] ?? 'Utilisateur').toString();
-                          final profilePicture =
-                              (userData['profilepicture'] ?? '').toString();
+                          return ListView.builder(
+                            itemCount: posts.length,
+                            itemBuilder: (context, index) {
+                              final post = posts[index];
+                              final data = post.data() as Map<String, dynamic>;
 
-                          return PostCard(
-                            postId: postId,
-                            userId: userId,
-                            username: pseudo.toString(),
-                            imageUrl: imageUrl,
-                            description: content,
+                              final isHidden =
+                                  (data['isHidden'] ?? false) as bool;
+                              if (isHidden) return const SizedBox.shrink();
 
-                            likeCount: likes.length,
-                            isLiked: isLiked,
-                            userProfilePicture: profilePicture?.toString(),
+                              final postId = post.id;
+                              final content =
+                                  (data['content'] ?? '').toString();
+                              final imageUrl =
+                                  (data['imageUrl'] ?? '').toString();
+                              final authorId =
+                                  (data['userId'] ?? '').toString();
 
-                            onLikePressed: () async {
-                              final userUid =
-                                  FirebaseAuth.instance.currentUser?.uid;
-                              if (userUid == null) return;
+                              // ✅ FILTRE BLOCAGE (les 2 sens)
+                              // - si je l'ai bloqué : je ne vois pas ses posts
+                              // - si il m'a bloqué : je ne vois pas ses posts non plus
+                              if (blocked.contains(authorId) ||
+                                  blockedBy.contains(authorId)) {
+                                return const SizedBox.shrink();
+                              }
 
-                              final postRef = FirebaseFirestore.instance
-                                  .collection('posts')
-                                  .doc(postId);
+                              _commentControllers.putIfAbsent(
+                                postId,
+                                () => TextEditingController(),
+                              );
+                              _visibleCommentCounts.putIfAbsent(
+                                  postId, () => 3);
 
-                              await FirebaseFirestore.instance
-                                  .runTransaction((transaction) async {
-                                final freshSnap =
-                                    await transaction.get(postRef);
-                                final updatedLikes = List<String>.from(
-                                    (freshSnap.data()?['likes'] ?? []) as List);
+                              final likes =
+                                  List<String>.from(data['likes'] ?? []);
+                              final isLiked = likes.contains(currentUid);
+                              final isInputVisible =
+                                  _showCommentInputFor.contains(postId);
 
-                                if (updatedLikes.contains(userUid)) {
-                                  updatedLikes.remove(userUid);
-                                } else {
-                                  updatedLikes.add(userUid);
-                                }
+                              return FutureBuilder<DocumentSnapshot>(
+                                future: FirebaseFirestore.instance
+                                    .collection('users')
+                                    .doc(authorId)
+                                    .get(),
+                                builder: (context, userSnapshot) {
+                                  if (!userSnapshot.hasData ||
+                                      userSnapshot.data == null) {
+                                    return const SizedBox.shrink();
+                                  }
 
-                                transaction
-                                    .update(postRef, {'likes': updatedLikes});
-                              });
+                                  final userData = (userSnapshot.data!.data()
+                                          as Map<String, dynamic>?) ??
+                                      {};
+                                  final pseudo =
+                                      (userData['pseudo'] ?? 'Utilisateur')
+                                          .toString();
+                                  final profilePicture =
+                                      (userData['profilepicture'] ?? '')
+                                          .toString();
+
+                                  return PostCard(
+                                    postId: postId,
+                                    userId: authorId,
+                                    username: pseudo,
+                                    imageUrl: imageUrl,
+                                    description: content,
+                                    likeCount: likes.length,
+                                    isLiked: isLiked,
+                                    userProfilePicture: profilePicture,
+                                    onLikePressed: () async {
+                                      final postRef = FirebaseFirestore.instance
+                                          .collection('posts')
+                                          .doc(postId);
+
+                                      await FirebaseFirestore.instance
+                                          .runTransaction((transaction) async {
+                                        final freshSnap =
+                                            await transaction.get(postRef);
+                                        final updatedLikes = List<String>.from(
+                                            (freshSnap.data()?['likes'] ?? [])
+                                                as List);
+
+                                        if (updatedLikes.contains(currentUid)) {
+                                          updatedLikes.remove(currentUid);
+                                        } else {
+                                          updatedLikes.add(currentUid);
+                                        }
+
+                                        transaction.update(
+                                            postRef, {'likes': updatedLikes});
+                                      });
+                                    },
+                                    onCommentIconPressed: () {
+                                      setState(() {
+                                        if (isInputVisible) {
+                                          _showCommentInputFor.remove(postId);
+                                        } else {
+                                          _showCommentInputFor.add(postId);
+                                        }
+                                      });
+                                    },
+                                    onToggleSave: () =>
+                                        _savedPostsService.toggleSave(postId),
+                                    isSavedStream:
+                                        _savedPostsService.isSaved(postId),
+                                    commentInput: isInputVisible
+                                        ? _buildCommentInput(postId)
+                                        : null,
+                                    commentsList: isInputVisible
+                                        ? _buildCommentList(postId)
+                                        : null,
+                                  );
+                                },
+                              );
                             },
-
-                            onCommentIconPressed: () {
-                              setState(() {
-                                if (isInputVisible) {
-                                  _showCommentInputFor.remove(postId);
-                                } else {
-                                  _showCommentInputFor.add(postId);
-                                }
-                              });
-                            },
-
-                            // ✅ BOOKMARK synchro
-                            onToggleSave: () =>
-                                _savedPostsService.toggleSave(postId),
-                            isSavedStream: _savedPostsService.isSaved(postId),
-
-                            commentInput: isInputVisible
-                                ? _buildCommentInput(postId)
-                                : null,
-                            commentsList: isInputVisible
-                                ? _buildCommentList(postId)
-                                : null,
                           );
                         },
                       );
