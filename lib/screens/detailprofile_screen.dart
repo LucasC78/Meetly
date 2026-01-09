@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:Meetly/config/theme.dart'; // ✅ pour pinkGradient
+import 'package:Meetly/config/theme.dart';
 import 'package:Meetly/screens/chat_screen.dart';
 import 'package:Meetly/widgets/post_card.dart';
+import 'package:Meetly/services/saved_posts_service.dart';
 
 class DetailProfilePage extends StatefulWidget {
   final String userId;
@@ -21,10 +22,14 @@ class _DetailProfilePageState extends State<DetailProfilePage> {
   int followingCount = 0;
   String? currentUserImageUrl;
 
-  final currentUserId = FirebaseAuth.instance.currentUser!.uid;
+  final String currentUserId = FirebaseAuth.instance.currentUser!.uid;
+  final SavedPostsService _savedPostsService = SavedPostsService();
+
   final Map<String, TextEditingController> _commentControllers = {};
   final Set<String> _showCommentInputFor = {};
   final Map<String, int> _visibleCommentCounts = {};
+
+  // ✅ Saved posts service (pour que l'icône bookmark soit cochée/décochée)
 
   @override
   void initState() {
@@ -32,6 +37,14 @@ class _DetailProfilePageState extends State<DetailProfilePage> {
     fetchUserData();
     fetchCurrentUserImage();
     checkIfFollowing();
+  }
+
+  @override
+  void dispose() {
+    for (final c in _commentControllers.values) {
+      c.dispose();
+    }
+    super.dispose();
   }
 
   Future<void> fetchUserData() async {
@@ -110,12 +123,6 @@ class _DetailProfilePageState extends State<DetailProfilePage> {
     }
   }
 
-  bool isValidImageUrl(String? url) {
-    if (url == null || url.isEmpty) return false;
-    final uri = Uri.tryParse(url);
-    return uri != null && uri.isAbsolute;
-  }
-
   @override
   Widget build(BuildContext context) {
     if (userData == null) {
@@ -187,10 +194,16 @@ class _DetailProfilePageState extends State<DetailProfilePage> {
                 delegate: SliverChildBuilderDelegate(
                   (context, index) {
                     final post = docs[index];
+                    final data = post.data() as Map<String, dynamic>;
+                    final isHidden = (data['isHidden'] ?? false) as bool;
+                    if (isHidden) return const SizedBox.shrink();
+
                     final postId = post.id;
-                    final content = post['content'] ?? '';
-                    final imageUrl = post['imageUrl'] ?? '';
-                    final userId = post['userId'];
+
+                    final content = (post['content'] ?? '').toString();
+                    final imageUrl = (post['imageUrl'] ?? '').toString();
+                    final userId = (post['userId'] ?? '').toString();
+
                     final likes = List<String>.from(post['likes'] ?? []);
                     final isLiked = likes.contains(currentUserId);
 
@@ -212,15 +225,18 @@ class _DetailProfilePageState extends State<DetailProfilePage> {
                           return const SizedBox.shrink();
                         }
 
-                        final userDoc = userSnapshot.data!;
-                        final rawData = userDoc.data();
-                        final ud =
-                            (rawData is Map<String, dynamic>) ? rawData : {};
+                        final raw = userSnapshot.data!.data();
+                        final ud = (raw is Map<String, dynamic>)
+                            ? raw
+                            : <String, dynamic>{};
 
-                        final username = ud['pseudo'] ?? 'Utilisateur';
-                        final userProfilePicture = ud['profilepicture'] ?? '';
+                        final username =
+                            (ud['pseudo'] ?? 'Utilisateur').toString();
+                        final userProfilePicture =
+                            (ud['profilepicture'] ?? '').toString();
 
                         return PostCard(
+                          postId: postId, // ✅ OBLIGATOIRE
                           userId: userId,
                           username: username,
                           imageUrl: imageUrl,
@@ -228,24 +244,31 @@ class _DetailProfilePageState extends State<DetailProfilePage> {
                           likeCount: likes.length,
                           isLiked: isLiked,
                           userProfilePicture: userProfilePicture,
+
+                          // ❤️ Like
                           onLikePressed: () async {
                             final postRef = FirebaseFirestore.instance
                                 .collection('posts')
                                 .doc(postId);
+
                             await FirebaseFirestore.instance
                                 .runTransaction((transaction) async {
                               final freshSnap = await transaction.get(postRef);
-                              List<dynamic> updatedLikes =
-                                  List.from(freshSnap['likes'] ?? []);
+                              final updatedLikes =
+                                  List<String>.from(freshSnap['likes'] ?? []);
+
                               if (updatedLikes.contains(currentUserId)) {
                                 updatedLikes.remove(currentUserId);
                               } else {
                                 updatedLikes.add(currentUserId);
                               }
+
                               transaction
                                   .update(postRef, {'likes': updatedLikes});
                             });
                           },
+
+                          // 💬 Commentaires
                           onCommentIconPressed: () {
                             setState(() {
                               if (isInputVisible) {
@@ -255,6 +278,12 @@ class _DetailProfilePageState extends State<DetailProfilePage> {
                               }
                             });
                           },
+
+                          // 🔖 ENREGISTREMENT (la clé du problème)
+                          onToggleSave: () =>
+                              _savedPostsService.toggleSave(postId),
+                          isSavedStream: _savedPostsService.isSaved(postId),
+
                           commentInput: isInputVisible
                               ? _buildCommentInput(postId)
                               : null,
@@ -275,7 +304,7 @@ class _DetailProfilePageState extends State<DetailProfilePage> {
   }
 
   // =========================
-  // HEADER PROFIL (orange)
+  // HEADER PROFIL
   // =========================
   Widget _buildHeader(BuildContext context, String? profileImageUrl) {
     final theme = Theme.of(context);
@@ -288,7 +317,7 @@ class _DetailProfilePageState extends State<DetailProfilePage> {
           padding: const EdgeInsets.all(4),
           decoration: const BoxDecoration(
             shape: BoxShape.circle,
-            gradient: pinkGradient, // ✅ orange
+            gradient: pinkGradient,
           ),
           child: CircleAvatar(
             backgroundColor: theme.scaffoldBackgroundColor,
@@ -339,7 +368,7 @@ class _DetailProfilePageState extends State<DetailProfilePage> {
         Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            // ✅ Bouton Abonnement (orange)
+            // ✅ Follow
             Container(
               decoration: BoxDecoration(
                 gradient: pinkGradient,
@@ -383,10 +412,9 @@ class _DetailProfilePageState extends State<DetailProfilePage> {
                 ),
               ),
             ),
-
             const SizedBox(width: 12),
 
-            // ✅ Bouton Message (orange)
+            // ✅ Message
             Container(
               decoration: BoxDecoration(
                 gradient: pinkGradient,
@@ -458,7 +486,7 @@ class _DetailProfilePageState extends State<DetailProfilePage> {
   }
 
   // =========================
-  // Commentaires (orange)
+  // Commentaires
   // =========================
 
   Widget _buildCommentInput(String postId) {
@@ -480,7 +508,7 @@ class _DetailProfilePageState extends State<DetailProfilePage> {
               margin: const EdgeInsets.all(6),
               decoration: const BoxDecoration(
                 shape: BoxShape.circle,
-                gradient: pinkGradient, // ✅ orange
+                gradient: pinkGradient,
               ),
               child: const Icon(Icons.send, color: Colors.white),
             ),
@@ -491,7 +519,7 @@ class _DetailProfilePageState extends State<DetailProfilePage> {
   }
 
   Widget _buildCommentList(String postId) {
-    int visibleCount = _visibleCommentCounts[postId] ?? 3;
+    final visibleCount = _visibleCommentCounts[postId] ?? 3;
 
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance
@@ -502,6 +530,7 @@ class _DetailProfilePageState extends State<DetailProfilePage> {
           .snapshots(),
       builder: (context, snapshot) {
         if (!snapshot.hasData) return const SizedBox.shrink();
+
         final comments = snapshot.data!.docs;
         final totalComments = comments.length;
         final visibleComments = comments.take(visibleCount).toList();
@@ -510,22 +539,19 @@ class _DetailProfilePageState extends State<DetailProfilePage> {
           children: [
             ...visibleComments.map((comment) {
               final data = comment.data() as Map<String, dynamic>;
-              final userId = data['userId'] ?? '';
-              final content = data['content'] ?? '';
+              final uid = (data['userId'] ?? '').toString();
+              final content = (data['content'] ?? '').toString();
 
               return FutureBuilder<DocumentSnapshot>(
                 future: FirebaseFirestore.instance
                     .collection('users')
-                    .doc(userId)
+                    .doc(uid)
                     .get(),
-                builder: (context, snapshot) {
-                  final name = snapshot.data?.get('pseudo') ?? 'Utilisateur';
-
+                builder: (context, snap) {
+                  final name = snap.data?.get('pseudo') ?? 'Utilisateur';
                   return Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 4,
-                    ),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
                     child: Row(
                       children: [
                         Text(
@@ -536,10 +562,8 @@ class _DetailProfilePageState extends State<DetailProfilePage> {
                               ?.copyWith(fontWeight: FontWeight.bold),
                         ),
                         Expanded(
-                          child: Text(
-                            content,
-                            style: Theme.of(context).textTheme.bodyMedium,
-                          ),
+                          child: Text(content,
+                              style: Theme.of(context).textTheme.bodyMedium),
                         ),
                       ],
                     ),
@@ -585,6 +609,7 @@ class _DetailProfilePageState extends State<DetailProfilePage> {
         'userId': user.uid,
         'timestamp': FieldValue.serverTimestamp(),
       });
+
       _commentControllers[postId]?.clear();
     }
   }

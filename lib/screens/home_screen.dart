@@ -1,20 +1,24 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+
 import 'package:Meetly/widgets/burger_menu.dart';
-import 'package:Meetly/config/theme.dart'; // ton theme.dart
+import 'package:Meetly/config/theme.dart';
 import 'package:Meetly/widgets/custom_bottom_nav_bar.dart';
+
+import 'package:Meetly/services/saved_posts_service.dart';
+import 'package:Meetly/widgets/post_card.dart'; // ✅ IMPORTANT : on utilise le vrai PostCard
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
 
   @override
-  _HomeScreenState createState() => _HomeScreenState();
+  State<HomeScreen> createState() => _HomeScreenState();
 }
 
 class _HomeScreenState extends State<HomeScreen> {
   String userEmail = 'Email non disponible';
-  String userName = 'Nom de l\'utilisateur';
+  String userName = "Nom de l'utilisateur";
   String? userProfilePicture;
 
   final TextEditingController _searchController = TextEditingController();
@@ -26,35 +30,46 @@ class _HomeScreenState extends State<HomeScreen> {
 
   User? currentUser;
 
+  final SavedPostsService _savedPostsService = SavedPostsService();
+
   @override
   void initState() {
     super.initState();
     _loadUserData();
   }
 
+  @override
+  void dispose() {
+    _searchController.dispose();
+    for (final c in _commentControllers.values) {
+      c.dispose();
+    }
+    super.dispose();
+  }
+
   Future<void> _loadUserData() async {
     currentUser = FirebaseAuth.instance.currentUser;
-    if (currentUser != null) {
+    if (currentUser == null) return;
+
+    setState(() {
+      userEmail = currentUser!.email ?? 'Email non disponible';
+    });
+
+    final userDoc = await FirebaseFirestore.instance
+        .collection('users')
+        .doc(currentUser!.uid)
+        .get();
+
+    if (userDoc.exists) {
       setState(() {
-        userEmail = currentUser!.email ?? 'Email non disponible';
+        userName = (userDoc.data()?['pseudo'] ?? 'Nom inconnu').toString();
+        userProfilePicture = userDoc.data()?['profilepicture'];
       });
-
-      final userDoc = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(currentUser!.uid)
-          .get();
-
-      if (userDoc.exists) {
-        setState(() {
-          userName = userDoc['pseudo'] ?? 'Nom inconnu';
-          userProfilePicture = userDoc['profilepicture'];
-        });
-      }
     }
   }
 
   void _searchUsers(String query) async {
-    if (query.isEmpty) {
+    if (query.trim().isEmpty) {
       setState(() => _searchResults = []);
       return;
     }
@@ -69,8 +84,8 @@ class _HomeScreenState extends State<HomeScreen> {
       _searchResults = snapshot.docs
           .map((doc) => {
                 'id': doc.id,
-                'pseudo': doc['pseudo'],
-                'email': doc['email'],
+                'pseudo': (doc.data()['pseudo'] ?? '').toString(),
+                'email': (doc.data()['email'] ?? '').toString(),
               })
           .toList();
     });
@@ -80,18 +95,21 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void _addComment(String postId, String content) async {
     final user = FirebaseAuth.instance.currentUser;
-    if (user != null && content.trim().isNotEmpty) {
-      await FirebaseFirestore.instance
-          .collection('posts')
-          .doc(postId)
-          .collection('comments')
-          .add({
-        'content': content,
-        'userId': user.uid,
-        'timestamp': FieldValue.serverTimestamp(),
-      });
-      _commentControllers[postId]?.clear();
-    }
+    if (user == null) return;
+
+    if (content.trim().isEmpty) return;
+
+    await FirebaseFirestore.instance
+        .collection('posts')
+        .doc(postId)
+        .collection('comments')
+        .add({
+      'content': content.trim(),
+      'userId': user.uid,
+      'timestamp': FieldValue.serverTimestamp(),
+    });
+
+    _commentControllers[postId]?.clear();
   }
 
   Widget _buildCommentInput(String postId) {
@@ -115,7 +133,7 @@ class _HomeScreenState extends State<HomeScreen> {
               margin: const EdgeInsets.all(6),
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                gradient: pinkGradient, // 🔥 dégradé orange global
+                gradient: pinkGradient,
                 boxShadow: [
                   BoxShadow(
                     color: theme.colorScheme.primary.withOpacity(0.4),
@@ -153,8 +171,8 @@ class _HomeScreenState extends State<HomeScreen> {
           children: [
             ...limitedComments.map((comment) {
               final data = comment.data() as Map<String, dynamic>;
-              final userId = data['userId'] ?? '';
-              final content = data['content'] ?? '';
+              final userId = (data['userId'] ?? '').toString();
+              final content = (data['content'] ?? '').toString();
 
               return FutureBuilder<DocumentSnapshot>(
                 future: FirebaseFirestore.instance
@@ -166,10 +184,8 @@ class _HomeScreenState extends State<HomeScreen> {
                       userSnapshot.data?.get('pseudo') ?? 'Utilisateur';
 
                   return Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 4,
-                    ),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
                     child: Row(
                       children: [
                         Text(
@@ -180,10 +196,8 @@ class _HomeScreenState extends State<HomeScreen> {
                               ?.copyWith(fontWeight: FontWeight.bold),
                         ),
                         Expanded(
-                          child: Text(
-                            content,
-                            style: Theme.of(context).textTheme.bodyMedium,
-                          ),
+                          child: Text(content,
+                              style: Theme.of(context).textTheme.bodyMedium),
                         ),
                       ],
                     ),
@@ -271,17 +285,6 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
       body: Column(
         children: [
-          // (optionnel) champ de recherche si tu veux l'afficher
-          // Padding(
-          //   padding: const EdgeInsets.all(16.0),
-          //   child: TextField(
-          //     controller: _searchController,
-          //     onChanged: _searchUsers,
-          //     decoration: const InputDecoration(
-          //       hintText: 'Rechercher un utilisateur...',
-          //     ),
-          //   ),
-          // ),
           if (_searchResults.isNotEmpty)
             Expanded(
               child: ListView.builder(
@@ -315,21 +318,26 @@ class _HomeScreenState extends State<HomeScreen> {
                     itemCount: posts.length,
                     itemBuilder: (context, index) {
                       final post = posts[index];
+                      final data = post.data() as Map<String, dynamic>;
+
+                      final isHidden = (data['isHidden'] ?? false) as bool;
+                      if (isHidden) return const SizedBox.shrink();
+
                       final postId = post.id;
 
                       _commentControllers.putIfAbsent(
-                        postId,
-                        () => TextEditingController(),
-                      );
+                          postId, () => TextEditingController());
                       _visibleCommentCounts.putIfAbsent(postId, () => 3);
 
-                      final content = post['content'] ?? '';
-                      final imageUrl = post['imageUrl'] ?? '';
-                      final userId = post['userId'] ?? '';
-                      final likes = List<String>.from(post['likes'] ?? []);
+                      final content = (data['content'] ?? '').toString();
+                      final imageUrl = (data['imageUrl'] ?? '').toString();
+                      final userId = (data['userId'] ?? '').toString();
+
+                      final likes = List<String>.from(data['likes'] ?? []);
                       final currentUid =
                           FirebaseAuth.instance.currentUser?.uid ?? '';
                       final isLiked = likes.contains(currentUid);
+
                       final isInputVisible =
                           _showCommentInputFor.contains(postId);
 
@@ -339,24 +347,35 @@ class _HomeScreenState extends State<HomeScreen> {
                             .doc(userId)
                             .get(),
                         builder: (context, userSnapshot) {
+                          if (userSnapshot.connectionState ==
+                              ConnectionState.waiting) {
+                            return const SizedBox.shrink();
+                          }
+                          if (!userSnapshot.hasData ||
+                              userSnapshot.data == null) {
+                            return const SizedBox.shrink();
+                          }
+
+                          final userData = (userSnapshot.data!.data()
+                                  as Map<String, dynamic>?) ??
+                              {};
+
                           final pseudo =
-                              userSnapshot.data?.get('pseudo') ?? 'Utilisateur';
-                          final profilePicture = userSnapshot.data != null &&
-                                  (userSnapshot.data!.data()
-                                              as Map<String, dynamic>?)
-                                          ?.containsKey('profilepicture') ==
-                                      true
-                              ? userSnapshot.data!['profilepicture']
-                              : null;
+                              (userData['pseudo'] ?? 'Utilisateur').toString();
+                          final profilePicture =
+                              (userData['profilepicture'] ?? '').toString();
 
                           return PostCard(
+                            postId: postId,
                             userId: userId,
-                            username: pseudo,
+                            username: pseudo.toString(),
                             imageUrl: imageUrl,
-                            content: content,
+                            description: content,
+
                             likeCount: likes.length,
-                            userProfilePicture: profilePicture,
                             isLiked: isLiked,
+                            userProfilePicture: profilePicture?.toString(),
+
                             onLikePressed: () async {
                               final userUid =
                                   FirebaseAuth.instance.currentUser?.uid;
@@ -366,24 +385,24 @@ class _HomeScreenState extends State<HomeScreen> {
                                   .collection('posts')
                                   .doc(postId);
 
-                              await FirebaseFirestore.instance.runTransaction(
-                                (transaction) async {
-                                  final freshSnap =
-                                      await transaction.get(postRef);
-                                  final updatedLikes = List<String>.from(
-                                      freshSnap['likes'] ?? []);
+                              await FirebaseFirestore.instance
+                                  .runTransaction((transaction) async {
+                                final freshSnap =
+                                    await transaction.get(postRef);
+                                final updatedLikes = List<String>.from(
+                                    (freshSnap.data()?['likes'] ?? []) as List);
 
-                                  if (updatedLikes.contains(userUid)) {
-                                    updatedLikes.remove(userUid);
-                                  } else {
-                                    updatedLikes.add(userUid);
-                                  }
+                                if (updatedLikes.contains(userUid)) {
+                                  updatedLikes.remove(userUid);
+                                } else {
+                                  updatedLikes.add(userUid);
+                                }
 
-                                  transaction
-                                      .update(postRef, {'likes': updatedLikes});
-                                },
-                              );
+                                transaction
+                                    .update(postRef, {'likes': updatedLikes});
+                              });
                             },
+
                             onCommentIconPressed: () {
                               setState(() {
                                 if (isInputVisible) {
@@ -393,6 +412,12 @@ class _HomeScreenState extends State<HomeScreen> {
                                 }
                               });
                             },
+
+                            // ✅ BOOKMARK synchro
+                            onToggleSave: () =>
+                                _savedPostsService.toggleSave(postId),
+                            isSavedStream: _savedPostsService.isSaved(postId),
+
                             commentInput: isInputVisible
                                 ? _buildCommentInput(postId)
                                 : null,
@@ -410,191 +435,13 @@ class _HomeScreenState extends State<HomeScreen> {
         ],
       ),
       bottomNavigationBar: CustomBottomNavBar(
-        selectedIndex: 0, // ✅ HOME = 0
+        selectedIndex: 0,
         onItemTapped: (index) {
-          if (index == 0) return; // ✅ déjà sur home
+          if (index == 0) return;
           if (index == 1) Navigator.pushNamed(context, '/search');
           if (index == 2) Navigator.pushNamed(context, '/addpost');
           if (index == 3) Navigator.pushNamed(context, '/profile');
         },
-      ),
-    );
-  }
-}
-
-// ==================== POST CARD ==================== //
-
-class PostCard extends StatelessWidget {
-  final String username;
-  final String imageUrl;
-  final String content;
-  final int likeCount;
-  final bool isLiked;
-  final VoidCallback onLikePressed;
-  final VoidCallback onCommentIconPressed;
-  final Widget? commentInput;
-  final Widget? commentsList;
-  final String? userProfilePicture;
-  final String userId;
-
-  const PostCard({
-    super.key,
-    required this.username,
-    required this.imageUrl,
-    required this.content,
-    required this.likeCount,
-    required this.isLiked,
-    required this.onLikePressed,
-    required this.onCommentIconPressed,
-    required this.userProfilePicture,
-    required this.userId,
-    this.commentInput,
-    this.commentsList,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
-
-    return Container(
-      margin: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
-      decoration: BoxDecoration(
-        color: theme.cardColor,
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: isDark ? darkGlowShadow : lightSoftShadow,
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // HEADER USER
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-            child: Row(
-              children: [
-                Container(
-                  width: 40,
-                  height: 40,
-                  decoration: const BoxDecoration(
-                    shape: BoxShape.circle,
-                    gradient: pinkGradient, // dégradé orange
-                  ),
-                  padding: const EdgeInsets.all(2),
-                  child: CircleAvatar(
-                    backgroundColor: theme.scaffoldBackgroundColor,
-                    backgroundImage: userProfilePicture != null &&
-                            userProfilePicture!.isNotEmpty
-                        ? NetworkImage(userProfilePicture!)
-                        : null,
-                    child: (userProfilePicture == null ||
-                            userProfilePicture!.isEmpty)
-                        ? Icon(Icons.person, color: theme.colorScheme.secondary)
-                        : null,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                GestureDetector(
-                  onTap: () {
-                    Navigator.pushNamed(
-                      context,
-                      '/profiledetail',
-                      arguments: userId,
-                    );
-                  },
-                  child: Text(
-                    username,
-                    style: theme.textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.bold,
-                      color: theme.colorScheme.secondary,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-
-          // IMAGE
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16.0),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(16),
-              child: AspectRatio(
-                aspectRatio: 4 / 3,
-                child: Image.network(
-                  imageUrl,
-                  width: double.infinity,
-                  fit: BoxFit.cover,
-                  errorBuilder: (_, __, ___) => const SizedBox(
-                    child: Center(child: Text('Image non disponible')),
-                  ),
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(height: 12),
-
-          // TEXTE + ACTIONS
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                RichText(
-                  text: TextSpan(
-                    children: [
-                      TextSpan(
-                        text: '$username ',
-                        style: theme.textTheme.bodyMedium?.copyWith(
-                          fontWeight: FontWeight.bold,
-                          color: theme.colorScheme.secondary,
-                        ),
-                      ),
-                      TextSpan(
-                        text: content,
-                        style: theme.textTheme.bodyMedium,
-                      ),
-                    ],
-                  ),
-                ),
-                Row(
-                  children: [
-                    IconButton(
-                      icon: Icon(
-                        isLiked ? Icons.favorite : Icons.favorite_border,
-                        color: isLiked
-                            ? theme.colorScheme.secondary
-                            : theme.textTheme.bodyMedium?.color,
-                      ),
-                      onPressed: onLikePressed,
-                    ),
-                    Text(
-                      '$likeCount likes',
-                      style: theme.textTheme.bodyMedium,
-                    ),
-                    const Spacer(),
-                    IconButton(
-                      icon: Icon(
-                        Icons.comment,
-                        color: theme.colorScheme.primary,
-                      ),
-                      onPressed: onCommentIconPressed,
-                    ),
-                    const SizedBox(width: 12),
-                    Icon(
-                      Icons.bookmark_border,
-                      color: theme.colorScheme.primary,
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-              ],
-            ),
-          ),
-
-          if (commentsList != null) commentsList!,
-          if (commentInput != null) commentInput!,
-          const SizedBox(height: 16),
-        ],
       ),
     );
   }

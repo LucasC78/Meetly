@@ -107,7 +107,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
           return const Center(child: CircularProgressIndicator());
         }
 
-        final posts = snapshot.data!.docs;
+        final allPosts = snapshot.data!.docs;
+
+// ✅ on retire les posts masqués
+        final posts = allPosts.where((doc) {
+          final data = doc.data() as Map<String, dynamic>? ?? {};
+          return (data['isHidden'] ?? false) != true;
+        }).toList();
+
         if (posts.isEmpty) {
           return Center(
             child: Text(

@@ -2,13 +2,24 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:Meetly/config/theme.dart';
 import 'package:Meetly/widgets/burger_menu.dart';
+import 'package:Meetly/screens/saved_posts_screen.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
 
-  void _logout(BuildContext context) async {
+  Future<void> _logout(BuildContext context) async {
     await FirebaseAuth.instance.signOut();
+    if (!context.mounted) return;
     Navigator.pushNamedAndRemoveUntil(context, '/login', (route) => false);
+  }
+
+  void _openSavedPosts(BuildContext context) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => SavedPostsScreen(),
+      ),
+    );
   }
 
   @override
@@ -59,6 +70,15 @@ class SettingsScreen extends StatelessWidget {
               label: 'Modifier le compte',
               onTap: () => Navigator.pushNamed(context, '/editprofile'),
             ),
+
+            // ✅ Posts enregistrés (route directe, plus de pushNamed)
+            _buildSettingTile(
+              context,
+              icon: Icons.bookmark_outline,
+              label: 'Posts enregistrés',
+              onTap: () => _openSavedPosts(context),
+            ),
+
             _buildSettingTile(
               context,
               icon: Icons.lock_outline,
@@ -114,7 +134,7 @@ class SettingsScreen extends StatelessWidget {
           children: [
             Container(
               padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
+              decoration: const BoxDecoration(
                 shape: BoxShape.circle,
                 gradient: pinkGradient,
               ),

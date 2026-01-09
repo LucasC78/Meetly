@@ -13,6 +13,7 @@ import 'screens/test_screen.dart';
 import 'screens/search_user_screen.dart';
 import 'screens/forgot_password_screen.dart';
 import 'screens/splash_screen.dart';
+import 'package:Meetly/screens/saved_posts_screen.dart';
 
 class Routes {
   // Définir les routes de ton application
@@ -29,6 +30,7 @@ class Routes {
       '/forgot-password': (context) => const ForgotPasswordScreen(),
       '/test': (context) => UploadScreen(),
       '/search': (context) => const SearchUserScreen(),
+      '/saved-posts': (context) => SavedPostsScreen(),
       '/profiledetail': (context) {
         final route = ModalRoute.of(context);
         final args = route?.settings.arguments;
