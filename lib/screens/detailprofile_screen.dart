@@ -5,6 +5,7 @@ import 'package:Meetly/config/theme.dart';
 import 'package:Meetly/screens/chat_screen.dart';
 import 'package:Meetly/widgets/post_card.dart';
 import 'package:Meetly/services/saved_posts_service.dart';
+import 'package:Meetly/services/block_service.dart';
 
 class DetailProfilePage extends StatefulWidget {
   final String userId;
@@ -28,6 +29,7 @@ class _DetailProfilePageState extends State<DetailProfilePage> {
   final Map<String, TextEditingController> _commentControllers = {};
   final Set<String> _showCommentInputFor = {};
   final Map<String, int> _visibleCommentCounts = {};
+  final BlockService _blockService = BlockService();
 
   // ✅ BLOCK STATES
   bool _loadingBlockStatus = true;
@@ -98,15 +100,10 @@ class _DetailProfilePageState extends State<DetailProfilePage> {
 
   Future<void> _blockUser() async {
     try {
-      await _myBlockRef().set({
-        'blockedAt': FieldValue.serverTimestamp(),
-      });
+      await _blockService.blockUser(currentUserId, widget.userId);
 
       if (!mounted) return;
-      setState(() {
-        _iBlockedHim = true;
-        // _blockedEitherWay devient true automatiquement
-      });
+      setState(() => _iBlockedHim = true);
 
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("Utilisateur bloqué.")),
@@ -120,18 +117,15 @@ class _DetailProfilePageState extends State<DetailProfilePage> {
 
   Future<void> _unblockUser() async {
     try {
-      await _myBlockRef().delete();
+      await _blockService.unblockUser(currentUserId, widget.userId);
 
       if (!mounted) return;
-      setState(() {
-        _iBlockedHim = false;
-      });
+      setState(() => _iBlockedHim = false);
 
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("Utilisateur débloqué.")),
       );
 
-      // Recharge le profil normalement
       await _initAll();
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(

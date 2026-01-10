@@ -3,12 +3,14 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 class BlockService {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
 
+  // refs
   CollectionReference<Map<String, dynamic>> _blockedRef(String uid) =>
       _db.collection('users').doc(uid).collection('blocked');
 
   CollectionReference<Map<String, dynamic>> _blockedByRef(String uid) =>
       _db.collection('users').doc(uid).collection('blockedBy');
 
+  /// BLOQUER
   Future<void> blockUser(String currentUid, String targetUid) async {
     if (currentUid == targetUid) return;
 
@@ -16,18 +18,29 @@ class BlockService {
 
     final batch = _db.batch();
 
-    // A) moi -> blocked
-    batch.set(_blockedRef(currentUid).doc(targetUid), {'blockedAt': now});
+    // current -> blocked
+    batch.set(
+      _blockedRef(currentUid).doc(targetUid),
+      {
+        'blockedUid': targetUid,
+        'blockedAt': now,
+      },
+    );
 
-    // B) l'autre -> blockedBy (pour qu’il sache qu’il est bloqué)
-    batch.set(_blockedByRef(targetUid).doc(currentUid), {'blockedAt': now});
+    // target -> blockedBy
+    batch.set(
+      _blockedByRef(targetUid).doc(currentUid),
+      {
+        'blockedUid': currentUid,
+        'blockedAt': now,
+      },
+    );
 
     await batch.commit();
   }
 
+  /// DÉBLOQUER
   Future<void> unblockUser(String currentUid, String targetUid) async {
-    if (currentUid == targetUid) return;
-
     final batch = _db.batch();
 
     batch.delete(_blockedRef(currentUid).doc(targetUid));
@@ -36,31 +49,16 @@ class BlockService {
     await batch.commit();
   }
 
-  // ===== streams bool =====
-  Stream<bool> isBlocked(String currentUid, String targetUid) {
-    return _blockedRef(currentUid)
-        .doc(targetUid)
-        .snapshots()
-        .map((doc) => doc.exists);
-  }
-
-  Stream<bool> isBlockedBy(String currentUid, String otherUid) {
-    return _blockedByRef(currentUid)
-        .doc(otherUid)
-        .snapshots()
-        .map((doc) => doc.exists);
-  }
-
-  // ===== streams list =====
-  Stream<Set<String>> blockedIdsStream(String currentUid) {
-    return _blockedRef(currentUid).snapshots().map(
-          (snap) => snap.docs.map((d) => d.id).toSet(),
+  /// streams pour HOME
+  Stream<Set<String>> blockedIdsStream(String uid) {
+    return _blockedRef(uid).snapshots().map(
+          (s) => s.docs.map((d) => d.id).toSet(),
         );
   }
 
-  Stream<Set<String>> blockedByIdsStream(String currentUid) {
-    return _blockedByRef(currentUid).snapshots().map(
-          (snap) => snap.docs.map((d) => d.id).toSet(),
+  Stream<Set<String>> blockedByIdsStream(String uid) {
+    return _blockedByRef(uid).snapshots().map(
+          (s) => s.docs.map((d) => d.id).toSet(),
         );
   }
 }

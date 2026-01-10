@@ -217,13 +217,23 @@ class _LoginScreenState extends State<LoginScreen> {
                             horizontal: 20,
                           ),
                           decoration: BoxDecoration(
-                            color: Colors.black,
+                            color: isDark
+                                ? Colors.black
+                                : Colors.white, // ✅ light/dark
                             border: Border.all(
-                              color: theme.colorScheme.onSurface.withOpacity(
-                                0.2,
-                              ),
+                              color: isDark
+                                  ? Colors.white.withOpacity(0.15)
+                                  : Colors.black.withOpacity(0.12),
                             ),
                             borderRadius: BorderRadius.circular(24),
+                            boxShadow: [
+                              if (!isDark)
+                                BoxShadow(
+                                  color: Colors.black.withOpacity(0.08),
+                                  blurRadius: 10,
+                                  offset: const Offset(0, 4),
+                                ),
+                            ],
                           ),
                           child: Row(
                             mainAxisAlignment: MainAxisAlignment.center,
@@ -236,7 +246,12 @@ class _LoginScreenState extends State<LoginScreen> {
                               const SizedBox(width: 10),
                               Text(
                                 'Connectez-vous avec Google',
-                                style: theme.textTheme.bodyLarge,
+                                style: theme.textTheme.bodyLarge?.copyWith(
+                                  color: isDark
+                                      ? Colors.white
+                                      : Colors.black, // ✅ texte lisible
+                                  fontWeight: FontWeight.w400,
+                                ),
                               ),
                             ],
                           ),

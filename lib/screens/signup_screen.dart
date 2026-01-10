@@ -243,32 +243,47 @@ class _SignUpScreenState extends State<SignUpScreen> {
                                 horizontal: 20,
                               ),
                               decoration: BoxDecoration(
-                                color: Colors.black,
+                                color: isDark
+                                    ? Colors.black
+                                    : Colors.white, // ✅ FIX light/dark
                                 border: Border.all(
-                                  color: theme.colorScheme.onSurface
-                                      .withOpacity(0.2),
+                                  color: isDark
+                                      ? Colors.white.withOpacity(0.15)
+                                      : Colors.black.withOpacity(0.12),
                                 ),
                                 borderRadius: BorderRadius.circular(24),
+                                boxShadow: [
+                                  if (!isDark)
+                                    BoxShadow(
+                                      color: Colors.black.withOpacity(0.08),
+                                      blurRadius: 10,
+                                      offset: const Offset(0, 4),
+                                    ),
+                                ],
                               ),
                               child: Row(
                                 mainAxisAlignment: MainAxisAlignment.center,
                                 children: [
                                   Image.asset(
-                                    'assets/icons/google-icon.png',
+                                    'assets/icons/google-icon.png', // ✅ TON BON CHEMIN
                                     height: 30,
                                     width: 30,
                                   ),
                                   const SizedBox(width: 10),
                                   Text(
                                     'Connectez-vous avec Google',
-                                    style: theme.textTheme.bodyLarge,
+                                    style: theme.textTheme.bodyLarge?.copyWith(
+                                      color: isDark
+                                          ? Colors.white
+                                          : Colors.black, // ✅ texte lisible
+                                      fontWeight: FontWeight.w400,
+                                    ),
                                   ),
                                 ],
                               ),
                             ),
                           ),
                         ),
-
                   const SizedBox(height: 20),
 
                   GestureDetector(
