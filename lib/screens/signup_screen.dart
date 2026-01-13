@@ -1,12 +1,12 @@
-// ✅ SignUpScreen.dart (corrigé : anti “double compte” + gestion Google account-exists)
-// Copie/colle tel quel dans ton fichier SignUpScreen.dart
+// ✅ SignUpScreen.dart (propre + anti doublon Firestore email via UserService)
+// Copie/colle TEL QUEL dans ton fichier SignUpScreen.dart
 
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:Meetly/config/theme.dart';
 import 'package:Meetly/services/auth_service.dart';
 import 'package:Meetly/services/notification_service.dart';
+import 'package:Meetly/services/user_service.dart';
 
 class SignUpScreen extends StatefulWidget {
   const SignUpScreen({super.key});
@@ -24,6 +24,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
   final _pseudoController = TextEditingController();
 
   final AuthService _authService = AuthService();
+  final UserService _userService = UserService();
 
   bool _isGoogleLoading = false;
   bool _isLoading = false;
@@ -80,7 +81,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
       final password = _passwordController.text.trim();
       final pseudo = _pseudoController.text.trim();
 
-      // ✅ Création du compte (Firebase empêche déjà l’email en double)
+      // ✅ Firebase Auth empêche déjà l’email en double au niveau Auth
       final credential =
           await FirebaseAuth.instance.createUserWithEmailAndPassword(
         email: email,
@@ -93,14 +94,11 @@ class _SignUpScreenState extends State<SignUpScreen> {
       // ✅ Email verification
       await user.sendEmailVerification();
 
-      // ✅ Firestore (profil)
-      await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
-        'email': user.email,
-        'pseudo': pseudo,
-        'rgpdAccepted': true,
-        'rgpdAcceptedAt': FieldValue.serverTimestamp(),
-        'createdAt': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
+      // ✅ Firestore: anti doublon email + upsert profil
+      await _userService.upsertUserProfile(
+        user: user,
+        pseudo: pseudo,
+      );
 
       if (!mounted) return;
       await NotificationService.saveFcmToken();
@@ -111,17 +109,22 @@ class _SignUpScreenState extends State<SignUpScreen> {
       if (!mounted) return;
 
       String msg = "Une erreur est survenue.";
-      if (e.code == 'email-already-in-use') {
-        msg = "Cet email est déjà utilisé. Connecte-toi plutôt.";
-      } else if (e.code == 'invalid-email') {
-        msg = "Adresse email invalide.";
-      } else if (e.code == 'weak-password') {
-        msg = "Mot de passe trop faible.";
+
+      switch (e.code) {
+        case 'email-already-in-use':
+          msg = "Cet email est déjà utilisé. Connecte-toi plutôt.";
+          break;
+        case 'invalid-email':
+          msg = "Adresse email invalide.";
+          break;
+        case 'weak-password':
+          msg = "Mot de passe trop faible.";
+          break;
+        default:
+          msg = e.message ?? msg;
       }
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(msg)),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -151,31 +154,30 @@ class _SignUpScreenState extends State<SignUpScreen> {
 
       final pseudo = _pseudoController.text.trim();
 
-      await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
-        'email': user.email,
-        'pseudo':
+      // ✅ Firestore: anti doublon email + upsert profil
+      await _userService.upsertUserProfile(
+        user: user,
+        pseudo:
             pseudo.isNotEmpty ? pseudo : (user.displayName ?? 'Utilisateur'),
-        'rgpdAccepted': true,
-        'rgpdAcceptedAt': FieldValue.serverTimestamp(),
-        'createdAt': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
+        profilePicture: user.photoURL ?? '',
+      );
 
       if (!mounted) return;
       await NotificationService.saveFcmToken();
       NotificationService.listenToTokenRefresh();
 
-      // ✅ Google = email déjà vérifié => go home
+      // ✅ Google => email généralement déjà vérifié
       Navigator.pushReplacementNamed(context, '/home');
     } on FirebaseAuthException catch (e) {
       if (!mounted) return;
       setState(() => _isGoogleLoading = false);
 
-      // ✅ Cas “double compte” (email déjà existant via une autre méthode)
+      // ✅ cas "compte existe déjà autrement"
       if (e.code == 'account-exists-with-different-credential') {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text(
-              "Cet email existe déjà avec une autre méthode. Connecte-toi avec email + mot de passe, puis lie Google depuis les paramètres.",
+              "Cet email existe déjà avec une autre méthode. Connecte-toi avec email + mot de passe.",
             ),
           ),
         );
@@ -183,7 +185,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
         return;
       }
 
-      // ✅ Autre cas fréquent
+      // ✅ cas doublon email Firestore (réservation déjà prise)
       if (e.code == 'email-already-in-use') {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(

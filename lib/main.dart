@@ -10,14 +10,14 @@ import 'package:cloudinary_url_gen/cloudinary.dart';
 import 'package:Meetly/config/theme.dart';
 import 'package:Meetly/services/push_service.dart';
 
-// ✅ AJOUT : ton écran verify email
-import 'package:Meetly/screens/verify_email_screen.dart'; // <-- crée ce fichier si pas encore fait
+import 'package:Meetly/screens/verify_email_screen.dart';
+import 'package:Meetly/screens/chat_screen.dart'; // ✅ IMPORTANT
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
 
-  await PushService.init();
+  await PushService.init(); // ✅ OK ici
 
   CloudinaryContext.cloudinary = Cloudinary.fromCloudName(
     cloudName: 'dzvqcdfdg',
@@ -41,18 +41,12 @@ class MyApp extends StatelessWidget {
       themeMode: ThemeMode.system,
       initialRoute: '/splash',
 
-      // ✅ On garde tes routes, et on ajoute verify-email
-      routes: {
-        ...baseRoutes,
-        '/verify-email': (context) => const VerifyEmailScreen(),
-      },
-
-      // ✅ BLOQUAGE : interception des navigations
+      // ❌ IMPORTANT : on enlève routes: {...baseRoutes}
+      // ✅ On gère TOUT ici pour supporter les arguments
       onGenerateRoute: (settings) {
         final name = settings.name ?? '';
         final user = FirebaseAuth.instance.currentUser;
 
-        // Routes libres (tu peux en ajouter si besoin)
         const freeRoutes = <String>{
           '/splash',
           '/login',
@@ -61,17 +55,18 @@ class MyApp extends StatelessWidget {
           '/verify-email',
         };
 
-        // 1) Si non connecté -> pas accès à home et aux écrans protégés
         final isProtected = !freeRoutes.contains(name);
+
+        // 1) Pas connecté -> redirect login
         if (isProtected && user == null) {
+          final loginBuilder = baseRoutes['/login'];
           return MaterialPageRoute(
-            builder: (_) => baseRoutes['/login']!(context),
+            builder: (_) => loginBuilder!(context),
             settings: const RouteSettings(name: '/login'),
           );
         }
 
-        // 2) Si connecté MAIS email non vérifié -> redirection vers verify-email
-        // (uniquement pour les routes protégées)
+        // 2) Connecté mais email non vérifié -> verify-email (sauf routes libres)
         if (isProtected && user != null && !user.emailVerified) {
           return MaterialPageRoute(
             builder: (_) => const VerifyEmailScreen(),
@@ -79,7 +74,41 @@ class MyApp extends StatelessWidget {
           );
         }
 
-        // 3) Sinon -> route normale
+        // ✅ ROUTE SPECIALE : CHAT avec arguments
+        if (name == '/chat') {
+          final args = settings.arguments;
+
+          if (args is Map<String, dynamic>) {
+            final currentUserId = (args['currentUserId'] ?? '').toString();
+            final otherUserId = (args['otherUserId'] ?? '').toString();
+
+            if (currentUserId.isNotEmpty && otherUserId.isNotEmpty) {
+              return MaterialPageRoute(
+                builder: (_) => ChatScreen(
+                  currentUserId: currentUserId,
+                  otherUserId: otherUserId,
+                ),
+                settings: settings,
+              );
+            }
+          }
+
+          // fallback si args manquants
+          return MaterialPageRoute(
+            builder: (_) => baseRoutes['/home']!(context),
+            settings: const RouteSettings(name: '/home'),
+          );
+        }
+
+        // ✅ VERIFY EMAIL
+        if (name == '/verify-email') {
+          return MaterialPageRoute(
+            builder: (_) => const VerifyEmailScreen(),
+            settings: settings,
+          );
+        }
+
+        // 3) Route classique
         final pageBuilder = baseRoutes[name];
         if (pageBuilder != null) {
           return MaterialPageRoute(

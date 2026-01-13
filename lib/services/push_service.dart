@@ -1,6 +1,5 @@
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
-import 'package:flutter/material.dart';
 
 class PushService {
   static final FlutterLocalNotificationsPlugin _localNotif =
@@ -14,16 +13,15 @@ class PushService {
     importance: Importance.high,
   );
 
-  /// À appeler UNE FOIS au démarrage (après Firebase.initializeApp)
   static Future<void> init() async {
-    // 1) Permissions (surtout iOS)
+    // 1) Permissions (Android 13+ & iOS)
     await FirebaseMessaging.instance.requestPermission(
       alert: true,
       badge: true,
       sound: true,
     );
 
-    // 2) iOS : comment afficher en foreground
+    // 2) iOS foreground
     await FirebaseMessaging.instance
         .setForegroundNotificationPresentationOptions(
       alert: true,
@@ -31,37 +29,32 @@ class PushService {
       sound: true,
     );
 
-    // 3) Init local notifications
-    const androidInit = AndroidInitializationSettings('@mipmap/ic_launcher');
-    const iosInit = DarwinInitializationSettings();
-
+    // 3) Local notifications init
     const initSettings = InitializationSettings(
-      android: androidInit,
-      iOS: iosInit,
+      android: AndroidInitializationSettings('@mipmap/ic_launcher'),
+      iOS: DarwinInitializationSettings(),
     );
 
-    await _localNotif.initialize(
-      initSettings,
-      onDidReceiveNotificationResponse: (resp) {
-        // on gérera le click plus tard (étape 3)
-      },
-    );
+    await _localNotif.initialize(initSettings);
 
-    // 4) Android channel (obligatoire pour high importance)
+    // 4) Android channel
     await _localNotif
         .resolvePlatformSpecificImplementation<
             AndroidFlutterLocalNotificationsPlugin>()
         ?.createNotificationChannel(_channel);
 
-    // 5) Listener: message reçu en foreground => on affiche une notif locale
-    FirebaseMessaging.onMessage.listen((RemoteMessage message) async {
-      final notif = message.notification;
-      if (notif == null) return;
+    // 5) Foreground message → notif locale
+    FirebaseMessaging.onMessage.listen((message) async {
+      final title =
+          message.notification?.title ?? message.data['title'] ?? 'Meetly';
+      final body = message.notification?.body ?? message.data['body'] ?? '';
+
+      if (title.isEmpty && body.isEmpty) return;
 
       await _localNotif.show(
-        notif.hashCode,
-        notif.title ?? 'Meetly',
-        notif.body ?? '',
+        DateTime.now().millisecondsSinceEpoch ~/ 1000,
+        title,
+        body,
         NotificationDetails(
           android: AndroidNotificationDetails(
             _channel.id,
@@ -72,8 +65,15 @@ class PushService {
           ),
           iOS: const DarwinNotificationDetails(),
         ),
-        payload: message.data.isNotEmpty ? message.data.toString() : null,
       );
     });
+
+    // 6) Click notif (background)
+    FirebaseMessaging.onMessageOpenedApp.listen((message) {
+      // navigation plus tard
+    });
+
+    // 7) Click notif (app fermée)
+    await FirebaseMessaging.instance.getInitialMessage();
   }
 }

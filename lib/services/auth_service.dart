@@ -25,14 +25,28 @@ class AuthService {
       final GoogleSignInAuthentication googleAuth =
           await googleUser.authentication;
 
-      final OAuthCredential credential = GoogleAuthProvider.credential(
+      final OAuthCredential googleCredential = GoogleAuthProvider.credential(
         accessToken: googleAuth.accessToken,
         idToken: googleAuth.idToken,
       );
 
-      // 🔐 AUTH FIREBASE
+      final email = (googleUser.email).trim();
+
+      // ✅ ANTI-DOUBLON : si un compte existe déjà avec password -> on bloque
+      final methods = await _auth.fetchSignInMethodsForEmail(email);
+
+      // "password" => compte créé via email/mot de passe
+      if (methods.contains('password')) {
+        throw FirebaseAuthException(
+          code: 'account-exists-with-different-credential',
+          message:
+              "Un compte existe déjà avec cet email. Connecte-toi avec ton mot de passe, puis tu pourras lier Google.",
+        );
+      }
+
+      // 🔐 AUTH FIREBASE (Google)
       final UserCredential userCredential =
-          await _auth.signInWithCredential(credential);
+          await _auth.signInWithCredential(googleCredential);
 
       final User? user = userCredential.user;
 
@@ -50,12 +64,24 @@ class AuthService {
             'following': [],
             'createdAt': FieldValue.serverTimestamp(),
           });
+        } else {
+          // ✅ optionnel : on garde Firestore à jour si besoin
+          await userDoc.set({
+            'email': user.email,
+            'profilepicture': user.photoURL ?? '',
+          }, SetOptions(merge: true));
         }
       }
 
       return userCredential;
     } on FirebaseAuthException {
-      rethrow; // 🔥 OBLIGATOIRE pour bloquer les doubles comptes
+      rethrow; // 🔥 IMPORTANT : le UI catch doit recevoir l'erreur
+    } catch (e) {
+      // On rethrow en FirebaseAuthException générique pour garder un flux propre
+      throw FirebaseAuthException(
+        code: 'google-signin-failed',
+        message: 'Erreur connexion Google: $e',
+      );
     }
   }
 
@@ -64,9 +90,6 @@ class AuthService {
     await _auth.signOut();
   }
 }
-
-
-
 
 
 
