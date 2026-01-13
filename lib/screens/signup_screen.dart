@@ -81,6 +81,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
       final password = _passwordController.text.trim();
       final pseudo = _pseudoController.text.trim();
 
+      // ✅ 1) Création du compte
       UserCredential credential =
           await FirebaseAuth.instance.createUserWithEmailAndPassword(
         email: email,
@@ -88,23 +89,36 @@ class _SignUpScreenState extends State<SignUpScreen> {
       );
 
       final User? user = credential.user;
-
       if (user == null) return;
 
+      // ✅ 2) Envoi du mail de vérification
+      await user.sendEmailVerification();
+
+      // ✅ 3) Firestore (RGPD + pseudo)
       await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
         'email': user.email,
+        'pseudo': pseudo,
         'rgpdAccepted': true,
         'rgpdAcceptedAt': FieldValue.serverTimestamp(),
+        'createdAt': FieldValue.serverTimestamp(),
       }, SetOptions(merge: true));
 
+      // ✅ 4) Notifications (optionnel mais ok ici)
       if (!mounted) return;
       await NotificationService.saveFcmToken();
       NotificationService.listenToTokenRefresh();
-      Navigator.pushReplacementNamed(context, '/home');
+
+      // ✅ 5) Redirection vers écran "Vérifie ton email"
+      Navigator.pushReplacementNamed(context, '/verify-email');
     } on FirebaseAuthException catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Error: ${e.message}')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Erreur: $e')),
       );
     } finally {
       if (mounted) setState(() => _isLoading = false);
@@ -124,21 +138,26 @@ class _SignUpScreenState extends State<SignUpScreen> {
     if (!mounted) return;
     setState(() => _isGoogleLoading = false);
 
-    // ✅ EXTRACTION DU User
     final User? user = credential?.user;
-
     if (user == null) return;
 
-    // ✅ RGPD Firestore
+    // ✅ RGPD Firestore + pseudo si vide
+    final pseudo = _pseudoController.text.trim();
+
     await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
       'email': user.email,
+      'pseudo':
+          pseudo.isNotEmpty ? pseudo : (user.displayName ?? 'Utilisateur'),
       'rgpdAccepted': true,
       'rgpdAcceptedAt': FieldValue.serverTimestamp(),
+      'createdAt': FieldValue.serverTimestamp(),
     }, SetOptions(merge: true));
 
     if (!mounted) return;
     await NotificationService.saveFcmToken();
     NotificationService.listenToTokenRefresh();
+
+    // ✅ Google = email déjà vérifié => go home
     Navigator.pushReplacementNamed(context, '/home');
   }
 
@@ -243,9 +262,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                                 horizontal: 20,
                               ),
                               decoration: BoxDecoration(
-                                color: isDark
-                                    ? Colors.black
-                                    : Colors.white, // ✅ FIX light/dark
+                                color: isDark ? Colors.black : Colors.white,
                                 border: Border.all(
                                   color: isDark
                                       ? Colors.white.withOpacity(0.15)
@@ -265,7 +282,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                                 mainAxisAlignment: MainAxisAlignment.center,
                                 children: [
                                   Image.asset(
-                                    'assets/icons/google-icon.png', // ✅ TON BON CHEMIN
+                                    'assets/icons/google-icon.png',
                                     height: 30,
                                     width: 30,
                                   ),
@@ -273,9 +290,8 @@ class _SignUpScreenState extends State<SignUpScreen> {
                                   Text(
                                     'Connectez-vous avec Google',
                                     style: theme.textTheme.bodyLarge?.copyWith(
-                                      color: isDark
-                                          ? Colors.white
-                                          : Colors.black, // ✅ texte lisible
+                                      color:
+                                          isDark ? Colors.white : Colors.black,
                                       fontWeight: FontWeight.w400,
                                     ),
                                   ),
@@ -348,7 +364,8 @@ class _SignUpScreenState extends State<SignUpScreen> {
       obscureText: obscure,
       style: Theme.of(context).textTheme.bodyLarge,
       decoration: InputDecoration(hintText: hint),
-      validator: validator ?? (value) => value!.isEmpty ? 'Required' : null,
+      validator: validator ??
+          (value) => (value == null || value.isEmpty) ? 'Required' : null,
     );
   }
 

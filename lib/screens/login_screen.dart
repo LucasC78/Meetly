@@ -20,25 +20,53 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _isLoading = false;
   bool _isGoogleLoading = false;
 
+  @override
+  void dispose() {
+    _emailController.dispose();
+    _passwordController.dispose();
+    super.dispose();
+  }
+
   Future<void> _signIn() async {
-    FocusScope.of(context).unfocus(); // Fermer le clavier
+    FocusScope.of(context).unfocus();
     setState(() {
       _errorMessage = null;
       _isLoading = true;
     });
 
     try {
-      await FirebaseAuth.instance.signInWithEmailAndPassword(
+      final credential = await FirebaseAuth.instance.signInWithEmailAndPassword(
         email: _emailController.text.trim(),
         password: _passwordController.text.trim(),
       );
 
-      // Si connexion réussie
+      // ✅ Recharge l’état du user pour être sûr d’avoir emailVerified à jour
+      await credential.user?.reload();
+      final user = FirebaseAuth.instance.currentUser;
+
+      if (user == null) {
+        setState(() {
+          _errorMessage = "Erreur: utilisateur introuvable.";
+          _isLoading = false;
+        });
+        return;
+      }
+
+      // ✅ Si email non vérifié => on bloque l’accès au Home
+      if (!user.emailVerified) {
+        setState(() => _isLoading = false);
+        Navigator.pushReplacementNamed(context, '/verify-email');
+        return;
+      }
+
+      // ✅ OK => token + home
       await NotificationService.saveFcmToken();
       NotificationService.listenToTokenRefresh();
+
+      if (!mounted) return;
+      setState(() => _isLoading = false);
       Navigator.pushReplacementNamed(context, '/home');
     } on FirebaseAuthException catch (e) {
-      print('Firebase Error Code: ${e.code}');
       String message;
 
       switch (e.code) {
@@ -66,15 +94,16 @@ class _LoginScreenState extends State<LoginScreen> {
           break;
       }
 
+      if (!mounted) return;
       setState(() {
         _errorMessage = message;
-        _isLoading = false; // 👈 Reviens à l’état normal en cas d’erreur
+        _isLoading = false;
       });
     } catch (e) {
-      // Pour toutes les autres erreurs
+      if (!mounted) return;
       setState(() {
         _errorMessage = 'Erreur inconnue : $e';
-        _isLoading = false; // 👈 Ici aussi
+        _isLoading = false;
       });
     }
   }
@@ -85,19 +114,51 @@ class _LoginScreenState extends State<LoginScreen> {
       _isGoogleLoading = true;
     });
 
-    final user = await _authService.signInWithGoogle();
+    try {
+      // ⚠️ Chez toi AuthService.signInWithGoogle() renvoie parfois UserCredential?
+      // Ici on gère les 2 cas: UserCredential? ou User?
+      final result = await _authService.signInWithGoogle();
 
-    setState(() {
-      _isGoogleLoading = false;
-    });
+      // ---- Normalisation ----
+      User? user;
+      if (result is UserCredential) {
+        user = result.user;
+      } else if (result is User) {
+        user = result;
+      }
 
-    if (user != null) {
+      if (!mounted) return;
+      setState(() => _isGoogleLoading = false);
+
+      if (user == null) {
+        // utilisateur a annulé
+        debugPrint("Connexion Google annulée par l'utilisateur.");
+        return;
+      }
+
+      // ✅ Google = généralement déjà vérifié
+      await user.reload();
+      final current = FirebaseAuth.instance.currentUser;
+
+      // ✅ token + home
       await NotificationService.saveFcmToken();
       NotificationService.listenToTokenRefresh();
+
+      if (!mounted) return;
+
+      // Si jamais un jour ce n'est pas vérifié (rare), on redirige quand même.
+      if (current != null && !current.emailVerified) {
+        Navigator.pushReplacementNamed(context, '/verify-email');
+        return;
+      }
+
       Navigator.pushReplacementNamed(context, '/home');
-    } else {
-      // Ne rien faire : l'utilisateur a juste annulé
-      debugPrint("Connexion Google annulée par l'utilisateur.");
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isGoogleLoading = false;
+        _errorMessage = "Erreur Google: $e";
+      });
     }
   }
 
@@ -153,11 +214,12 @@ class _LoginScreenState extends State<LoginScreen> {
                   Text(
                     _errorMessage!,
                     style: const TextStyle(color: Colors.redAccent),
+                    textAlign: TextAlign.center,
                   ),
                 ],
                 const SizedBox(height: 8),
                 Align(
-                  alignment: Alignment.centerLeft, // 👈 aligne à gauche
+                  alignment: Alignment.centerLeft,
                   child: TextButton(
                     onPressed: () {
                       Navigator.pushNamed(context, '/forgot-password');
@@ -184,15 +246,12 @@ class _LoginScreenState extends State<LoginScreen> {
                         child: ElevatedButton(
                           onPressed: _signIn,
                           style: ElevatedButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(
-                              vertical: 20,
-                            ), // ↑ hauteur
+                            padding: const EdgeInsets.symmetric(vertical: 20),
                           ),
                           child: const Text(
                             'Connexion',
                             style: TextStyle(
-                              fontSize:
-                                  18, // 👈 ajuste ici (16–20 pour un bon impact visuel)
+                              fontSize: 18,
                               fontWeight: FontWeight.w600,
                             ),
                           ),
@@ -217,9 +276,7 @@ class _LoginScreenState extends State<LoginScreen> {
                             horizontal: 20,
                           ),
                           decoration: BoxDecoration(
-                            color: isDark
-                                ? Colors.black
-                                : Colors.white, // ✅ light/dark
+                            color: isDark ? Colors.black : Colors.white,
                             border: Border.all(
                               color: isDark
                                   ? Colors.white.withOpacity(0.15)
@@ -247,9 +304,7 @@ class _LoginScreenState extends State<LoginScreen> {
                               Text(
                                 'Connectez-vous avec Google',
                                 style: theme.textTheme.bodyLarge?.copyWith(
-                                  color: isDark
-                                      ? Colors.white
-                                      : Colors.black, // ✅ texte lisible
+                                  color: isDark ? Colors.white : Colors.black,
                                   fontWeight: FontWeight.w400,
                                 ),
                               ),
