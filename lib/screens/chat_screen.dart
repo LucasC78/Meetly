@@ -57,7 +57,8 @@ class _ChatScreenState extends State<ChatScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-            content: Text("Impossible d'envoyer : utilisateur bloqué.")),
+          content: Text("Impossible d'envoyer : utilisateur bloqué."),
+        ),
       );
       return;
     }
@@ -77,8 +78,11 @@ class _ChatScreenState extends State<ChatScreen> {
     super.dispose();
   }
 
-  Widget _blockedBanner(ThemeData theme,
-      {required bool youBlocked, required bool theyBlocked}) {
+  Widget _blockedBanner(
+    ThemeData theme, {
+    required bool youBlocked,
+    required bool theyBlocked,
+  }) {
     String text;
     if (youBlocked) {
       text = "Tu as bloqué cet utilisateur. Tu ne verras plus ses messages.";
@@ -104,10 +108,7 @@ class _ChatScreenState extends State<ChatScreen> {
           Icon(Icons.lock_outline, color: theme.colorScheme.primary),
           const SizedBox(width: 10),
           Expanded(
-            child: Text(
-              text,
-              style: theme.textTheme.bodyMedium,
-            ),
+            child: Text(text, style: theme.textTheme.bodyMedium),
           ),
         ],
       ),
@@ -119,6 +120,7 @@ class _ChatScreenState extends State<ChatScreen> {
     final theme = Theme.of(context);
 
     return Scaffold(
+      resizeToAvoidBottomInset: true, // ✅ FIX Android clavier/navbar
       backgroundColor: theme.scaffoldBackgroundColor,
       appBar: PreferredSize(
         preferredSize: const Size.fromHeight(100),
@@ -180,204 +182,229 @@ class _ChatScreenState extends State<ChatScreen> {
           ),
         ),
       ),
-      body: StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-        stream: _myBlockRef().snapshots(),
-        builder: (context, myBlockSnap) {
-          final youBlocked = myBlockSnap.data?.exists == true;
+      body: SafeArea(
+        bottom: true, // ✅ FIX navbar Android
+        child: StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+          stream: _myBlockRef().snapshots(),
+          builder: (context, myBlockSnap) {
+            final youBlocked = myBlockSnap.data?.exists == true;
 
-          return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-            stream: _otherBlockRef().snapshots(),
-            builder: (context, otherBlockSnap) {
-              final theyBlocked = otherBlockSnap.data?.exists == true;
+            return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+              stream: _otherBlockRef().snapshots(),
+              builder: (context, otherBlockSnap) {
+                final theyBlocked = otherBlockSnap.data?.exists == true;
+                final blockedEitherWay = youBlocked || theyBlocked;
 
-              final blockedEitherWay = youBlocked || theyBlocked;
-
-              return Column(
-                children: [
-                  if (blockedEitherWay)
-                    _blockedBanner(theme,
-                        youBlocked: youBlocked, theyBlocked: theyBlocked),
-
-                  Expanded(
-                    child: StreamBuilder<QuerySnapshot>(
-                      stream: _chatService.getMessages(
-                        widget.currentUserId,
-                        widget.otherUserId,
+                return Column(
+                  children: [
+                    if (blockedEitherWay)
+                      _blockedBanner(
+                        theme,
+                        youBlocked: youBlocked,
+                        theyBlocked: theyBlocked,
                       ),
-                      builder: (context, snapshot) {
-                        if (!snapshot.hasData) {
-                          return const Center(
-                              child: CircularProgressIndicator());
-                        }
 
-                        // ✅ on filtre les messages si TU as bloqué l'autre
-                        // (tu ne vois plus ses messages)
-                        final rawMessages = snapshot.data!.docs;
-                        final messages = youBlocked
-                            ? rawMessages.where((m) {
-                                final data = m.data() as Map<String, dynamic>;
-                                return data['senderId'] == widget.currentUserId;
-                              }).toList()
-                            : rawMessages;
-
-                        final chatId = _chatService.getChatId(
+                    Expanded(
+                      child: StreamBuilder<QuerySnapshot>(
+                        stream: _chatService.getMessages(
                           widget.currentUserId,
                           widget.otherUserId,
-                        );
+                        ),
+                        builder: (context, snapshot) {
+                          if (!snapshot.hasData) {
+                            return const Center(
+                                child: CircularProgressIndicator());
+                          }
 
-                        // ✅ mark seen uniquement si pas bloqué (sinon c’est bizarre)
-                        if (!blockedEitherWay) {
-                          for (var msg in rawMessages) {
-                            if (msg['receiverId'] == widget.currentUserId &&
-                                msg['seen'] == false) {
-                              _chatService.markMessageAsSeen(chatId, msg.id);
+                          // ✅ filtre messages si TU as bloqué l'autre
+                          final rawMessages = snapshot.data!.docs;
+                          final messages = youBlocked
+                              ? rawMessages.where((m) {
+                                  final data = m.data() as Map<String, dynamic>;
+                                  return data['senderId'] ==
+                                      widget.currentUserId;
+                                }).toList()
+                              : rawMessages;
+
+                          final chatId = _chatService.getChatId(
+                            widget.currentUserId,
+                            widget.otherUserId,
+                          );
+
+                          // ✅ mark seen uniquement si pas bloqué
+                          if (!blockedEitherWay) {
+                            for (final msg in rawMessages) {
+                              final data = msg.data() as Map<String, dynamic>;
+                              if (data['receiverId'] == widget.currentUserId &&
+                                  data['seen'] == false) {
+                                _chatService.markMessageAsSeen(chatId, msg.id);
+                              }
                             }
                           }
-                        }
 
-                        return ListView.builder(
-                          reverse: true,
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 12, vertical: 8),
-                          itemCount: messages.length,
-                          itemBuilder: (context, index) {
-                            final msg = messages[messages.length - 1 - index];
-                            final data = msg.data() as Map<String, dynamic>;
-                            final isMe =
-                                data['senderId'] == widget.currentUserId;
+                          return ListView.builder(
+                            reverse: true,
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 12, vertical: 8),
+                            itemCount: messages.length,
+                            itemBuilder: (context, index) {
+                              final msg = messages[messages.length - 1 - index];
+                              final data = msg.data() as Map<String, dynamic>;
+                              final isMe =
+                                  data['senderId'] == widget.currentUserId;
 
-                            return Align(
-                              alignment: isMe
-                                  ? Alignment.centerRight
-                                  : Alignment.centerLeft,
-                              child: Container(
-                                margin: const EdgeInsets.symmetric(
-                                    vertical: 6, horizontal: 4),
-                                padding: const EdgeInsets.symmetric(
-                                    vertical: 10, horizontal: 16),
-                                constraints: BoxConstraints(
-                                  maxWidth:
-                                      MediaQuery.of(context).size.width * 0.75,
-                                ),
-                                decoration: BoxDecoration(
-                                  gradient: LinearGradient(
-                                    colors: isMe
-                                        ? [
-                                            theme.primaryColor,
-                                            theme.colorScheme.secondary
-                                          ]
-                                        : [Colors.black26, Colors.black45],
-                                    begin: Alignment.topLeft,
-                                    end: Alignment.bottomRight,
+                              return Align(
+                                alignment: isMe
+                                    ? Alignment.centerRight
+                                    : Alignment.centerLeft,
+                                child: Container(
+                                  margin: const EdgeInsets.symmetric(
+                                      vertical: 6, horizontal: 4),
+                                  padding: const EdgeInsets.symmetric(
+                                      vertical: 10, horizontal: 16),
+                                  constraints: BoxConstraints(
+                                    maxWidth:
+                                        MediaQuery.of(context).size.width *
+                                            0.75,
                                   ),
-                                  borderRadius: BorderRadius.only(
-                                    topLeft: const Radius.circular(20),
-                                    topRight: const Radius.circular(20),
-                                    bottomLeft: Radius.circular(isMe ? 20 : 0),
-                                    bottomRight: Radius.circular(isMe ? 0 : 20),
-                                  ),
-                                ),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      (data['text'] ?? '').toString(),
-                                      style: const TextStyle(
-                                          color: Colors.white, fontSize: 16),
+                                  decoration: BoxDecoration(
+                                    gradient: LinearGradient(
+                                      colors: isMe
+                                          ? [
+                                              theme.primaryColor,
+                                              theme.colorScheme.secondary
+                                            ]
+                                          : [Colors.black26, Colors.black45],
+                                      begin: Alignment.topLeft,
+                                      end: Alignment.bottomRight,
                                     ),
-                                    if (isMe)
-                                      Padding(
-                                        padding: const EdgeInsets.only(top: 4),
-                                        child: Text(
-                                          (data['seen'] == true)
-                                              ? 'Vu'
-                                              : 'Non vu',
-                                          style: const TextStyle(
-                                            color: Colors.white70,
-                                            fontSize: 10,
-                                            fontStyle: FontStyle.italic,
+                                    borderRadius: BorderRadius.only(
+                                      topLeft: const Radius.circular(20),
+                                      topRight: const Radius.circular(20),
+                                      bottomLeft:
+                                          Radius.circular(isMe ? 20 : 0),
+                                      bottomRight:
+                                          Radius.circular(isMe ? 0 : 20),
+                                    ),
+                                  ),
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        (data['text'] ?? '').toString(),
+                                        style: const TextStyle(
+                                            color: Colors.white, fontSize: 16),
+                                      ),
+                                      if (isMe)
+                                        Padding(
+                                          padding:
+                                              const EdgeInsets.only(top: 4),
+                                          child: Text(
+                                            (data['seen'] == true)
+                                                ? 'Vu'
+                                                : 'Non vu',
+                                            style: const TextStyle(
+                                              color: Colors.white70,
+                                              fontSize: 10,
+                                              fontStyle: FontStyle.italic,
+                                            ),
                                           ),
                                         ),
-                                      ),
-                                  ],
+                                    ],
+                                  ),
                                 ),
-                              ),
-                            );
-                          },
-                        );
-                      },
+                              );
+                            },
+                          );
+                        },
+                      ),
                     ),
-                  ),
 
-                  // ✅ INPUT (bloqué si l’un des deux a bloqué)
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(12, 0, 12, 16),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: Container(
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(28),
-                              border: Border.all(
-                                color: theme.colorScheme.primary,
-                                width: 1.5,
-                              ),
-                            ),
-                            padding: const EdgeInsets.symmetric(horizontal: 16),
-                            child: TextField(
-                              controller: _controller,
-                              enabled: !blockedEitherWay,
-                              style: TextStyle(
-                                  color: theme.colorScheme.onBackground),
-                              decoration: InputDecoration(
-                                border: InputBorder.none,
-                                enabledBorder: InputBorder.none,
-                                focusedBorder: InputBorder.none,
-                                disabledBorder: InputBorder.none,
-                                hintText: blockedEitherWay
-                                    ? "Messagerie désactivée (blocage)"
-                                    : "Message...",
-                                hintStyle: TextStyle(
-                                  color: theme.colorScheme.primary
-                                      .withOpacity(0.9),
+                    // ✅ INPUT FIX : remonte au-dessus clavier + navbar Android
+                    AnimatedPadding(
+                      duration: const Duration(milliseconds: 180),
+                      curve: Curves.easeOut,
+                      padding: EdgeInsets.only(
+                        left: 12,
+                        right: 12,
+                        top: 0,
+                        bottom: 12 + MediaQuery.of(context).viewInsets.bottom,
+                      ),
+                      child: SafeArea(
+                        top: false,
+                        left: false,
+                        right: false,
+                        bottom: true,
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(28),
+                                  border: Border.all(
+                                    color: theme.colorScheme.primary,
+                                    width: 1.5,
+                                  ),
                                 ),
-                                icon: Icon(
-                                  Icons.chat_bubble_outline,
-                                  color: theme.colorScheme.primary,
+                                padding:
+                                    const EdgeInsets.symmetric(horizontal: 16),
+                                child: TextField(
+                                  controller: _controller,
+                                  enabled: !blockedEitherWay,
+                                  style: TextStyle(
+                                      color: theme.colorScheme.onBackground),
+                                  decoration: InputDecoration(
+                                    border: InputBorder.none,
+                                    enabledBorder: InputBorder.none,
+                                    focusedBorder: InputBorder.none,
+                                    disabledBorder: InputBorder.none,
+                                    hintText: blockedEitherWay
+                                        ? "Messagerie désactivée (blocage)"
+                                        : "Message...",
+                                    hintStyle: TextStyle(
+                                      color: theme.colorScheme.primary
+                                          .withOpacity(0.9),
+                                    ),
+                                    icon: Icon(
+                                      Icons.chat_bubble_outline,
+                                      color: theme.colorScheme.primary,
+                                    ),
+                                    contentPadding: const EdgeInsets.symmetric(
+                                        vertical: 12),
+                                    isCollapsed: true,
+                                    filled: false,
+                                    fillColor: Colors.transparent,
+                                  ),
                                 ),
-                                contentPadding:
-                                    const EdgeInsets.symmetric(vertical: 12),
-                                isCollapsed: true,
-                                filled: false,
-                                fillColor: Colors.transparent,
                               ),
                             ),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        GestureDetector(
-                          onTap: blockedEitherWay ? null : _sendMessage,
-                          child: Opacity(
-                            opacity: blockedEitherWay ? 0.45 : 1,
-                            child: Container(
-                              padding: const EdgeInsets.all(14),
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                gradient: pinkGradient,
+                            const SizedBox(width: 12),
+                            GestureDetector(
+                              onTap: blockedEitherWay ? null : _sendMessage,
+                              child: Opacity(
+                                opacity: blockedEitherWay ? 0.45 : 1,
+                                child: Container(
+                                  padding: const EdgeInsets.all(14),
+                                  decoration: const BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    gradient: pinkGradient,
+                                  ),
+                                  child: const Icon(Icons.send,
+                                      color: Colors.white),
+                                ),
                               ),
-                              child:
-                                  const Icon(Icons.send, color: Colors.white),
                             ),
-                          ),
+                          ],
                         ),
-                      ],
+                      ),
                     ),
-                  ),
-                ],
-              );
-            },
-          );
-        },
+                  ],
+                );
+              },
+            );
+          },
+        ),
       ),
     );
   }

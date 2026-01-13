@@ -1,3 +1,6 @@
+// ✅ SignUpScreen.dart (corrigé : anti “double compte” + gestion Google account-exists)
+// Copie/colle tel quel dans ton fichier SignUpScreen.dart
+
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -46,9 +49,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
   }
 
   String? _validatePassword(String? value) {
-    if (value == null || value.isEmpty) {
-      return 'Le mot de passe est requis.';
-    }
+    if (value == null || value.isEmpty) return 'Le mot de passe est requis.';
     if (value.length < 12) {
       return 'Le mot de passe doit contenir au moins 12 caractères.';
     }
@@ -57,9 +58,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
     final hasSpecialChar =
         RegExp(r'[!@#\$&*~%^()_+=\[\]{};:"\\|,.<>/?-]').hasMatch(value);
 
-    if (!hasNumber) {
-      return 'Le mot de passe doit contenir au moins un chiffre.';
-    }
+    if (!hasNumber) return 'Le mot de passe doit contenir au moins un chiffre.';
     if (!hasSpecialChar) {
       return 'Le mot de passe doit contenir au moins un caractère spécial.';
     }
@@ -81,20 +80,20 @@ class _SignUpScreenState extends State<SignUpScreen> {
       final password = _passwordController.text.trim();
       final pseudo = _pseudoController.text.trim();
 
-      // ✅ 1) Création du compte
-      UserCredential credential =
+      // ✅ Création du compte (Firebase empêche déjà l’email en double)
+      final credential =
           await FirebaseAuth.instance.createUserWithEmailAndPassword(
         email: email,
         password: password,
       );
 
-      final User? user = credential.user;
+      final user = credential.user;
       if (user == null) return;
 
-      // ✅ 2) Envoi du mail de vérification
+      // ✅ Email verification
       await user.sendEmailVerification();
 
-      // ✅ 3) Firestore (RGPD + pseudo)
+      // ✅ Firestore (profil)
       await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
         'email': user.email,
         'pseudo': pseudo,
@@ -103,22 +102,30 @@ class _SignUpScreenState extends State<SignUpScreen> {
         'createdAt': FieldValue.serverTimestamp(),
       }, SetOptions(merge: true));
 
-      // ✅ 4) Notifications (optionnel mais ok ici)
       if (!mounted) return;
       await NotificationService.saveFcmToken();
       NotificationService.listenToTokenRefresh();
 
-      // ✅ 5) Redirection vers écran "Vérifie ton email"
       Navigator.pushReplacementNamed(context, '/verify-email');
     } on FirebaseAuthException catch (e) {
       if (!mounted) return;
+
+      String msg = "Une erreur est survenue.";
+      if (e.code == 'email-already-in-use') {
+        msg = "Cet email est déjà utilisé. Connecte-toi plutôt.";
+      } else if (e.code == 'invalid-email') {
+        msg = "Adresse email invalide.";
+      } else if (e.code == 'weak-password') {
+        msg = "Mot de passe trop faible.";
+      }
+
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error: ${e.message}')),
+        SnackBar(content: Text(msg)),
       );
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Erreur: $e')),
+        SnackBar(content: Text("Erreur: $e")),
       );
     } finally {
       if (mounted) setState(() => _isLoading = false);
@@ -133,32 +140,70 @@ class _SignUpScreenState extends State<SignUpScreen> {
 
     setState(() => _isGoogleLoading = true);
 
-    final UserCredential? credential = await _authService.signInWithGoogle();
+    try {
+      final UserCredential? credential = await _authService.signInWithGoogle();
 
-    if (!mounted) return;
-    setState(() => _isGoogleLoading = false);
+      if (!mounted) return;
+      setState(() => _isGoogleLoading = false);
 
-    final User? user = credential?.user;
-    if (user == null) return;
+      final User? user = credential?.user;
+      if (user == null) return;
 
-    // ✅ RGPD Firestore + pseudo si vide
-    final pseudo = _pseudoController.text.trim();
+      final pseudo = _pseudoController.text.trim();
 
-    await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
-      'email': user.email,
-      'pseudo':
-          pseudo.isNotEmpty ? pseudo : (user.displayName ?? 'Utilisateur'),
-      'rgpdAccepted': true,
-      'rgpdAcceptedAt': FieldValue.serverTimestamp(),
-      'createdAt': FieldValue.serverTimestamp(),
-    }, SetOptions(merge: true));
+      await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
+        'email': user.email,
+        'pseudo':
+            pseudo.isNotEmpty ? pseudo : (user.displayName ?? 'Utilisateur'),
+        'rgpdAccepted': true,
+        'rgpdAcceptedAt': FieldValue.serverTimestamp(),
+        'createdAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
 
-    if (!mounted) return;
-    await NotificationService.saveFcmToken();
-    NotificationService.listenToTokenRefresh();
+      if (!mounted) return;
+      await NotificationService.saveFcmToken();
+      NotificationService.listenToTokenRefresh();
 
-    // ✅ Google = email déjà vérifié => go home
-    Navigator.pushReplacementNamed(context, '/home');
+      // ✅ Google = email déjà vérifié => go home
+      Navigator.pushReplacementNamed(context, '/home');
+    } on FirebaseAuthException catch (e) {
+      if (!mounted) return;
+      setState(() => _isGoogleLoading = false);
+
+      // ✅ Cas “double compte” (email déjà existant via une autre méthode)
+      if (e.code == 'account-exists-with-different-credential') {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              "Cet email existe déjà avec une autre méthode. Connecte-toi avec email + mot de passe, puis lie Google depuis les paramètres.",
+            ),
+          ),
+        );
+        Navigator.pushNamed(context, '/login');
+        return;
+      }
+
+      // ✅ Autre cas fréquent
+      if (e.code == 'email-already-in-use') {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Cet email est déjà utilisé. Connecte-toi plutôt."),
+          ),
+        );
+        Navigator.pushNamed(context, '/login');
+        return;
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Erreur Google: ${e.message ?? e.code}")),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isGoogleLoading = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Erreur: $e")),
+      );
+    }
   }
 
   @override
@@ -203,12 +248,10 @@ class _SignUpScreenState extends State<SignUpScreen> {
                     ),
                   ),
                   const SizedBox(height: 40),
-
                   _buildInputField('Pseudo', _pseudoController),
                   const SizedBox(height: 16),
                   _buildInputField('Email', _emailController),
                   const SizedBox(height: 16),
-
                   _buildInputField(
                     'Mot de Passe',
                     _passwordController,
@@ -216,7 +259,6 @@ class _SignUpScreenState extends State<SignUpScreen> {
                     validator: _validatePassword,
                   ),
                   const SizedBox(height: 16),
-
                   _buildInputField(
                     'Confirmer (Mot de passe)',
                     _confirmPasswordController,
@@ -225,21 +267,15 @@ class _SignUpScreenState extends State<SignUpScreen> {
                         ? 'Les mots de passe ne correspondent pas'
                         : null,
                   ),
-
                   const SizedBox(height: 18),
-
-                  // ✅ RGPD checkbox + lien cliquable
                   _buildRgpdRow(theme, isDark),
-
                   const SizedBox(height: 16),
-
                   _isLoading
                       ? const CircularProgressIndicator()
                       : _buildGradientButton(
                           label: 'S\'inscrire',
                           onPressed: _signUp,
                         ),
-
                   const SizedBox(height: 20),
                   Text(
                     'OU CONTINUER AVEC',
@@ -248,7 +284,6 @@ class _SignUpScreenState extends State<SignUpScreen> {
                     ),
                   ),
                   const SizedBox(height: 20),
-
                   _isGoogleLoading
                       ? const CircularProgressIndicator()
                       : GestureDetector(
@@ -301,7 +336,6 @@ class _SignUpScreenState extends State<SignUpScreen> {
                           ),
                         ),
                   const SizedBox(height: 20),
-
                   GestureDetector(
                     onTap: () => Navigator.pushNamed(context, '/login'),
                     child: Text(

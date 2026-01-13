@@ -16,7 +16,8 @@ class AuthService {
             )
           : GoogleSignIn();
 
-      await googleSignIn.signOut(); // Juste ça
+      // 🔑 force une session propre
+      await googleSignIn.signOut();
 
       final GoogleSignInAccount? googleUser = await googleSignIn.signIn();
       if (googleUser == null) return null;
@@ -24,15 +25,18 @@ class AuthService {
       final GoogleSignInAuthentication googleAuth =
           await googleUser.authentication;
 
-      final credential = GoogleAuthProvider.credential(
+      final OAuthCredential credential = GoogleAuthProvider.credential(
         accessToken: googleAuth.accessToken,
         idToken: googleAuth.idToken,
       );
 
-      UserCredential userCredential =
+      // 🔐 AUTH FIREBASE
+      final UserCredential userCredential =
           await _auth.signInWithCredential(credential);
-      User? user = userCredential.user;
 
+      final User? user = userCredential.user;
+
+      // 🧠 Firestore : création si premier login
       if (user != null) {
         final userDoc = _firestore.collection('users').doc(user.uid);
         final doc = await userDoc.get();
@@ -44,22 +48,23 @@ class AuthService {
             'profilepicture': user.photoURL ?? '',
             'bio': '',
             'following': [],
+            'createdAt': FieldValue.serverTimestamp(),
           });
         }
       }
 
       return userCredential;
-    } catch (e) {
-      print('❌ Erreur connexion Google : $e');
-      return null;
+    } on FirebaseAuthException {
+      rethrow; // 🔥 OBLIGATOIRE pour bloquer les doubles comptes
     }
   }
 
   Future<void> signOut() async {
     await GoogleSignIn().signOut();
-    await FirebaseAuth.instance.signOut();
+    await _auth.signOut();
   }
 }
+
 
 
 

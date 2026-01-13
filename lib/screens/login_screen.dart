@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
 import 'package:Meetly/services/auth_service.dart';
 import 'package:Meetly/config/theme.dart';
 import 'package:Meetly/services/notification_service.dart';
@@ -19,6 +21,27 @@ class _LoginScreenState extends State<LoginScreen> {
   String? _errorMessage;
   bool _isLoading = false;
   bool _isGoogleLoading = false;
+
+  // ✅ Rester connecté
+  bool _stayLoggedIn = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadStayLoggedInPref();
+  }
+
+  Future<void> _loadStayLoggedInPref() async {
+    final prefs = await SharedPreferences.getInstance();
+    final v = prefs.getBool('stay_logged_in') ?? false;
+    if (!mounted) return;
+    setState(() => _stayLoggedIn = v);
+  }
+
+  Future<void> _persistStayLoggedIn(bool value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('stay_logged_in', value);
+  }
 
   @override
   void dispose() {
@@ -40,7 +63,7 @@ class _LoginScreenState extends State<LoginScreen> {
         password: _passwordController.text.trim(),
       );
 
-      // ✅ Recharge l’état du user pour être sûr d’avoir emailVerified à jour
+      // ✅ reload pour emailVerified
       await credential.user?.reload();
       final user = FirebaseAuth.instance.currentUser;
 
@@ -52,14 +75,20 @@ class _LoginScreenState extends State<LoginScreen> {
         return;
       }
 
-      // ✅ Si email non vérifié => on bloque l’accès au Home
+      // ✅ Si email non vérifié => pas de stay logged
       if (!user.emailVerified) {
+        await _persistStayLoggedIn(false);
+
+        if (!mounted) return;
         setState(() => _isLoading = false);
         Navigator.pushReplacementNamed(context, '/verify-email');
         return;
       }
 
-      // ✅ OK => token + home
+      // ✅ OK => on stocke le choix “Rester connecté”
+      await _persistStayLoggedIn(_stayLoggedIn);
+
+      // ✅ token + home
       await NotificationService.saveFcmToken();
       NotificationService.listenToTokenRefresh();
 
@@ -115,11 +144,8 @@ class _LoginScreenState extends State<LoginScreen> {
     });
 
     try {
-      // ⚠️ Chez toi AuthService.signInWithGoogle() renvoie parfois UserCredential?
-      // Ici on gère les 2 cas: UserCredential? ou User?
       final result = await _authService.signInWithGoogle();
 
-      // ---- Normalisation ----
       User? user;
       if (result is UserCredential) {
         user = result.user;
@@ -131,27 +157,28 @@ class _LoginScreenState extends State<LoginScreen> {
       setState(() => _isGoogleLoading = false);
 
       if (user == null) {
-        // utilisateur a annulé
         debugPrint("Connexion Google annulée par l'utilisateur.");
         return;
       }
 
-      // ✅ Google = généralement déjà vérifié
       await user.reload();
       final current = FirebaseAuth.instance.currentUser;
 
-      // ✅ token + home
-      await NotificationService.saveFcmToken();
-      NotificationService.listenToTokenRefresh();
-
-      if (!mounted) return;
-
-      // Si jamais un jour ce n'est pas vérifié (rare), on redirige quand même.
+      // Rare mais on garde la même règle que email/password
       if (current != null && !current.emailVerified) {
+        await _persistStayLoggedIn(false);
+        if (!mounted) return;
         Navigator.pushReplacementNamed(context, '/verify-email');
         return;
       }
 
+      // ✅ OK => on stocke le choix “Rester connecté”
+      await _persistStayLoggedIn(_stayLoggedIn);
+
+      await NotificationService.saveFcmToken();
+      NotificationService.listenToTokenRefresh();
+
+      if (!mounted) return;
       Navigator.pushReplacementNamed(context, '/home');
     } catch (e) {
       if (!mounted) return;
@@ -209,30 +236,46 @@ class _LoginScreenState extends State<LoginScreen> {
                   theme,
                   obscure: true,
                 ),
-                if (_errorMessage != null) ...[
-                  const SizedBox(height: 16),
-                  Text(
-                    _errorMessage!,
-                    style: const TextStyle(color: Colors.redAccent),
-                    textAlign: TextAlign.center,
-                  ),
-                ],
                 const SizedBox(height: 8),
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: TextButton(
-                    onPressed: () {
-                      Navigator.pushNamed(context, '/forgot-password');
-                    },
-                    child: Text(
-                      'Mot de passe oublié ?',
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                        color: theme.colorScheme.secondary,
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Row(
+                      children: [
+                        Checkbox(
+                          value: _stayLoggedIn,
+                          onChanged: (v) =>
+                              setState(() => _stayLoggedIn = v ?? false),
+                          activeColor: theme.colorScheme.secondary,
+                          materialTapTargetSize:
+                              MaterialTapTargetSize.shrinkWrap,
+                        ),
+                        GestureDetector(
+                          onTap: () =>
+                              setState(() => _stayLoggedIn = !_stayLoggedIn),
+                          child: Text(
+                            "Rester connecté",
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    TextButton(
+                      onPressed: () {
+                        Navigator.pushNamed(context, '/forgot-password');
+                      },
+                      child: Text(
+                        'Mot de passe oublié ?',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.secondary,
+                        ),
                       ),
                     ),
-                  ),
+                  ],
                 ),
-                const SizedBox(height: 25),
+                const SizedBox(height: 18),
                 _isLoading
                     ? const CircularProgressIndicator()
                     : Container(
@@ -251,18 +294,15 @@ class _LoginScreenState extends State<LoginScreen> {
                           child: const Text(
                             'Connexion',
                             style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.w600,
-                            ),
+                                fontSize: 18, fontWeight: FontWeight.w600),
                           ),
                         ),
                       ),
                 const SizedBox(height: 20),
                 Text(
                   'OU CONTINUER AVEC',
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    letterSpacing: 1.2,
-                  ),
+                  style:
+                      theme.textTheme.bodySmall?.copyWith(letterSpacing: 1.2),
                 ),
                 const SizedBox(height: 20),
                 _isGoogleLoading
